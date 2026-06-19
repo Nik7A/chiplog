@@ -19,6 +19,11 @@ from pathlib import Path
 
 import click
 
+from agent_audit.adapters.claude_code import (
+    HookConfig,
+    emit_from_hook,
+    parse_hook_input,
+)
 from agent_audit.keys import load_public_key
 from agent_audit.report import format_json_report, format_text_report
 from agent_audit.verify import ChainCheckOutcome, verify_log
@@ -139,6 +144,40 @@ def cmd_inspect(log_path: Path, head: int) -> None:
             shown += 1
 
 
+@cli.command("hook-record")
+def cmd_hook_record() -> None:
+    """Read Claude Code hook JSON from stdin and emit one audit record.
+
+    Designed to be registered as a `PostToolUse` hook in
+    `~/.claude/settings.json`. Concurrent hook firings (parallel `Task`
+    spawns in Claude Code) are serialised via flock on
+    `<audit_dir>/state.lock` so the chain head stays consistent.
+
+    Config comes from environment variables:
+      AGENT_AUDIT_DIR          (default: ~/.config/agent-audit)
+      AGENT_AUDIT_SIGNING_KEY  (default: <dir>/signing.key)
+      AGENT_AUDIT_PUBKEY       (default: <dir>/signing.pub, if it exists)
+      AGENT_AUDIT_CHAIN_ID     (default: hook payload's session_id)
+    """
+    import fcntl
+
+    raw = sys.stdin.read()
+    hook_input = parse_hook_input(raw)
+    config = HookConfig.from_env()
+
+    config.audit_dir.mkdir(parents=True, exist_ok=True)
+    lock_path = config.audit_dir / "state.lock"
+
+    with open(lock_path, "w") as lockf:
+        fcntl.flock(lockf.fileno(), fcntl.LOCK_EX)
+        try:
+            emit_from_hook(hook_input, config)
+        finally:
+            fcntl.flock(lockf.fileno(), fcntl.LOCK_UN)
+
+    sys.exit(EXIT_OK)
+
+
 def main() -> None:
     """Console-script entry point. See pyproject.toml [project.scripts]."""
     cli()
@@ -154,3 +193,7 @@ __all__ = [
     "cli",
     "main",
 ]
+
+
+if __name__ == "__main__":
+    main()
