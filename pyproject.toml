@@ -17,6 +17,9 @@ dependencies = [
     "uuid6>=2024.7",
 ]
 
+[project.scripts]
+agent-audit = "agent_audit.cli:main"
+
 [build-system]
 requires = ["uv_build>=0.11.7,<0.12.0"]
 build-backend = "uv_build"
