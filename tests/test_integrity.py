@@ -100,7 +100,7 @@ def test_compute_record_hash_matches_sha256_of_signing_form() -> None:
 def test_sign_verify_round_trip(signing_key_in_memory: SigningKey) -> None:
     sk = signing_key_in_memory
     rec = make_test_vector_record()
-    signed = sign_record(rec, sk.private_key, sk.key_id)
+    signed = sign_record(rec, sk)
 
     result = verify_record(signed, pubkey_by_id={sk.key_id: sk.public_key})
     assert result.is_valid
@@ -117,9 +117,43 @@ def test_sign_does_not_mutate_input(signing_key_in_memory: SigningKey) -> None:
     rec_dict = make_test_vector_record().model_dump(mode="json")
     snapshot = {k: dict(v) if isinstance(v, dict) else v for k, v in rec_dict.items()}
 
-    sign_record(rec_dict, sk.private_key, sk.key_id)
+    sign_record(rec_dict, sk)
 
     assert rec_dict["envelope"] == snapshot["envelope"]
+
+
+def test_sign_record_refuses_non_signing_key_type() -> None:
+    """Passing a raw Ed25519PrivateKey (instead of SigningKey dataclass) must
+    refuse loud. Prevents the entire 'mismatched (priv_key, key_id) pair'
+    foot-gun class by construction — flagged by the Step 2 security review.
+    """
+    raw_priv = Ed25519PrivateKey.generate()
+    with pytest.raises(TypeError, match="SigningKey"):
+        sign_record(make_test_vector_record(), raw_priv)  # type: ignore[arg-type]
+
+
+def test_sign_record_refuses_deeply_nested_input(
+    signing_key_in_memory: SigningKey,
+) -> None:
+    """A misbehaving MCP server returning a pathologically nested dict must
+    NOT crash the emitter with RecursionError mid-call (which would silently
+    skip the audit record for exactly the call most worth auditing). Convert
+    to a ValueError that the recorder can surface cleanly. Flagged by the
+    Step 2 security review.
+    """
+    import sys
+    from typing import Any
+
+    rec = make_test_vector_record().model_dump(mode="json")
+    nested: dict[str, Any] = {}
+    cur = nested
+    for _ in range(sys.getrecursionlimit() + 50):
+        cur["a"] = {}
+        cur = cur["a"]
+    rec["payload"]["input"] = nested
+
+    with pytest.raises(ValueError, match="deeply nested"):
+        sign_record(rec, signing_key_in_memory)
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +166,7 @@ def test_tampered_input_field_detected_as_hash_mismatch(
 ) -> None:
     """Flip one byte in input.args. Verifier must catch as HASH_MISMATCH."""
     sk = signing_key_in_memory
-    signed = sign_record(make_test_vector_record(), sk.private_key, sk.key_id)
+    signed = sign_record(make_test_vector_record(), sk)
 
     signed["payload"]["input"]["file_path"] = "/etc/passwd"
 
@@ -149,7 +183,7 @@ def test_tampered_envelope_key_id_detected(
     fires first.)
     """
     sk = signing_key_in_memory
-    signed = sign_record(make_test_vector_record(), sk.private_key, sk.key_id)
+    signed = sign_record(make_test_vector_record(), sk)
     signed["envelope"]["key_id"] = "deadbeefdeadbeef"
 
     result = verify_record(
@@ -169,7 +203,7 @@ def test_forged_signature_detected_as_signature_invalid(
     """Replace signature with valid-shaped-but-bogus bytes. Hash stays consistent
     so the hash check passes; the signature check fails."""
     sk = signing_key_in_memory
-    signed = sign_record(make_test_vector_record(), sk.private_key, sk.key_id)
+    signed = sign_record(make_test_vector_record(), sk)
     signed["envelope"]["signature"] = base64.b64encode(b"\x00" * 64).decode()
 
     result = verify_record(signed, pubkey_by_id={sk.key_id: sk.public_key})
@@ -183,7 +217,7 @@ def test_signature_wrong_length_is_malformed(
     """A 63-byte signature is impossible for valid Ed25519 — refuse loud,
     don't silently fail signature verification."""
     sk = signing_key_in_memory
-    signed = sign_record(make_test_vector_record(), sk.private_key, sk.key_id)
+    signed = sign_record(make_test_vector_record(), sk)
     signed["envelope"]["signature"] = base64.b64encode(b"\x00" * 63).decode()
 
     result = verify_record(signed, pubkey_by_id={sk.key_id: sk.public_key})
@@ -193,7 +227,7 @@ def test_signature_wrong_length_is_malformed(
 
 def test_unknown_key_id_detected(signing_key_in_memory: SigningKey) -> None:
     sk = signing_key_in_memory
-    signed = sign_record(make_test_vector_record(), sk.private_key, sk.key_id)
+    signed = sign_record(make_test_vector_record(), sk)
 
     result = verify_record(signed, pubkey_by_id={})
     assert not result.is_valid
@@ -218,7 +252,7 @@ def test_chain_link_changes_when_signature_changes(
     so that signature tampering breaks the next record's prev_hash check.
     """
     sk = signing_key_in_memory
-    signed = sign_record(make_test_vector_record(), sk.private_key, sk.key_id)
+    signed = sign_record(make_test_vector_record(), sk)
     chain_a = compute_chain_link(signed)
 
     forged = {k: dict(v) if isinstance(v, dict) else v for k, v in signed.items()}
@@ -243,7 +277,7 @@ def test_sign_with_one_key_object_verify_with_pem_loaded_pubkey(
     its PEM serialization.
     """
     sk = signing_key_in_memory
-    signed = sign_record(make_test_vector_record(), sk.private_key, sk.key_id)
+    signed = sign_record(make_test_vector_record(), sk)
 
     pub_pem = sk.public_key.public_bytes(
         Encoding.PEM, PublicFormat.SubjectPublicKeyInfo

@@ -20,12 +20,10 @@ from enum import Enum
 from typing import Any
 
 from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives.asymmetric.ed25519 import (
-    Ed25519PrivateKey,
-    Ed25519PublicKey,
-)
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from agent_audit.canonical import canonical_for_chain_link, canonical_for_signing
+from agent_audit.keys import SigningKey
 
 
 # ---------------------------------------------------------------------------
@@ -59,40 +57,62 @@ def compute_chain_link(record: Any) -> str:
 # ---------------------------------------------------------------------------
 
 
-def sign_record(
-    record: Any, signing_key: Ed25519PrivateKey, key_id: str
-) -> dict[str, Any]:
+def sign_record(record: Any, signing_key: SigningKey) -> dict[str, Any]:
     """Return a NEW record dict with envelope.hash, envelope.signature, and
     envelope.key_id populated. Does NOT mutate the input.
 
+    Takes the full SigningKey dataclass (not separate private_key + key_id)
+    so a caller cannot accidentally mint records whose envelope.key_id does
+    not match the actual signing key — that's the exact 'unsigned-evidence
+    theater' the key loader's safety checks claim to prevent.
+
     Procedure (per SIGNING.md §3):
-      1. Set envelope.key_id (it's covered by the signing form).
+      1. Set envelope.key_id from signing_key.
       2. Strip envelope.hash + envelope.signature if present.
       3. hash_hex = SHA-256(canonical_for_signing(record)).
-      4. sig_bytes = Ed25519_sign(signing_key, bytes.fromhex(hash_hex)).
+      4. sig_bytes = Ed25519_sign(signing_key.private_key, bytes.fromhex(hash_hex)).
       5. envelope.signature = base64(sig_bytes).
     """
-    if hasattr(record, "model_dump"):
-        raw: dict[str, Any] = record.model_dump(mode="json")
-    elif isinstance(record, dict):
-        raw = deepcopy(record)
-    else:
+    if not isinstance(signing_key, SigningKey):
+        raise TypeError(
+            "signing_key must be a SigningKey dataclass (load via keys.load_signing_key). "
+            f"Got {type(signing_key).__name__}."
+        )
+
+    # The TypeError checks below must raise before we enter the recursion-guarded
+    # block, so callers see precise error types (not a generic ValueError).
+    if not hasattr(record, "model_dump") and not isinstance(record, dict):
         raise TypeError(
             f"record must be Pydantic Record or dict, got {type(record).__name__}"
         )
 
-    env = raw.setdefault("envelope", {})
-    if not isinstance(env, dict):
-        raise TypeError("record.envelope must be a dict")
+    # Hostile / misbehaving tool outputs can be pathologically nested.
+    # deepcopy, model_dump, and rfc8785 canonicalization all recurse — guard
+    # the entire normalise + hash flow rather than just canonicalisation.
+    try:
+        if hasattr(record, "model_dump"):
+            raw: dict[str, Any] = record.model_dump(mode="json")
+        else:
+            raw = deepcopy(record)
 
-    env["key_id"] = key_id
-    env.pop("hash", None)
-    env.pop("signature", None)
+        env = raw.setdefault("envelope", {})
+        if not isinstance(env, dict):
+            raise TypeError("record.envelope must be a dict")
 
-    hash_hex = compute_record_hash(raw)
+        env["key_id"] = signing_key.key_id
+        env.pop("hash", None)
+        env.pop("signature", None)
+
+        hash_hex = compute_record_hash(raw)
+    except RecursionError as e:
+        raise ValueError(
+            "record too deeply nested to canonicalize — refuse to sign rather "
+            "than crash the agent mid-emit"
+        ) from e
+
     env["hash"] = hash_hex
 
-    signature_bytes = signing_key.sign(bytes.fromhex(hash_hex))
+    signature_bytes = signing_key.private_key.sign(bytes.fromhex(hash_hex))
     env["signature"] = base64.b64encode(signature_bytes).decode("ascii")
 
     return raw
