@@ -63,12 +63,16 @@ class AuditRecorder:
         signing_key: SigningKey,
         redaction_config: RedactionConfig | None = None,
         chain_id: str | None = None,
+        initial_prev_hash: str | None = None,
     ) -> None:
         self._sink = sink
         self._signing_key = signing_key
         self._redaction = redaction_config or RedactionConfig()
         self._chain_id = chain_id
-        self._prev_hash: str | None = None
+        # initial_prev_hash lets a fresh process (e.g. Claude Code hook handler)
+        # resume an existing chain by loading the head hash from the sink's
+        # manifest. None = start a new chain (genesis record will have prev_hash=null).
+        self._prev_hash: str | None = initial_prev_hash
 
     async def record(
         self,
