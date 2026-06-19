@@ -1,0 +1,52 @@
+# Internal planning / personal docs — not for public repo
+BUILD_PLAN.md
+FRIDAY_CHECKLIST.md
+outreach.md
+dogfood-notes.md
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Test / type / lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+htmlcov/
+.hypothesis/
+
+# uv / poetry / pip
+uv.lock
+poetry.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local audit data (must never be committed)
+*.key
+*.pem
+.agent-audit/
+audit-*.jsonl
+manifest.json
+test-output/
