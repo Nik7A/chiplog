@@ -145,7 +145,19 @@ def cmd_inspect(log_path: Path, head: int) -> None:
 
 
 @cli.command("hook-record")
-def cmd_hook_record() -> None:
+@click.option(
+    "--chain-id",
+    "chain_id",
+    type=str,
+    default=None,
+    help=(
+        "Override chain_id for all hook records. Use a stable string "
+        "(e.g. 'daemon-global') to write a single linked chain across many "
+        "sessions, instead of one chain per session_id. Takes precedence "
+        "over the AGENT_AUDIT_CHAIN_ID environment variable."
+    ),
+)
+def cmd_hook_record(chain_id: str | None) -> None:
     """Read Claude Code hook JSON from stdin and emit one audit record.
 
     Designed to be registered as a `PostToolUse` hook in
@@ -153,17 +165,21 @@ def cmd_hook_record() -> None:
     spawns in Claude Code) are serialised via flock on
     `<audit_dir>/state.lock` so the chain head stays consistent.
 
-    Config comes from environment variables:
+    Config (CLI flag > env > default):
+      --chain-id               (overrides env)
       AGENT_AUDIT_DIR          (default: ~/.config/agent-audit)
       AGENT_AUDIT_SIGNING_KEY  (default: <dir>/signing.key)
       AGENT_AUDIT_PUBKEY       (default: <dir>/signing.pub, if it exists)
       AGENT_AUDIT_CHAIN_ID     (default: hook payload's session_id)
     """
+    import dataclasses
     import fcntl
 
     raw = sys.stdin.read()
     hook_input = parse_hook_input(raw)
     config = HookConfig.from_env()
+    if chain_id is not None:
+        config = dataclasses.replace(config, chain_id_override=chain_id)
 
     config.audit_dir.mkdir(parents=True, exist_ok=True)
     lock_path = config.audit_dir / "state.lock"

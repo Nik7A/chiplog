@@ -352,6 +352,75 @@ def test_cli_hook_record_writes_and_exits_0(
     assert record["payload"]["tool"]["name"] == "Read"
 
 
+def test_cli_hook_record_chain_id_flag_overrides_session(
+    tmp_path: Path,
+    key_files: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`--chain-id` on the CLI overrides session-scoped chains and beats env."""
+    priv, pub = key_files
+    audit_dir = tmp_path / "audit"
+    monkeypatch.setenv("AGENT_AUDIT_DIR", str(audit_dir))
+    monkeypatch.setenv("AGENT_AUDIT_SIGNING_KEY", str(priv))
+    monkeypatch.setenv("AGENT_AUDIT_PUBKEY", str(pub))
+    monkeypatch.setenv("AGENT_AUDIT_CHAIN_ID", "from-env")
+
+    payload = json.dumps(
+        {
+            "hook_event_name": "PostToolUse",
+            "session_id": "sess-from-payload",
+            "tool_name": "Read",
+            "tool_input": {},
+            "tool_response": "",
+        }
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["hook-record", "--chain-id", "from-cli"], input=payload
+    )
+    assert result.exit_code == 0, result.output
+
+    record = json.loads(
+        next(audit_dir.glob("audit-*.jsonl")).read_text().splitlines()[0]
+    )
+    # CLI flag wins over env var ("from-env") and over session_id payload field.
+    assert record["envelope"]["chain_id"] == "from-cli"
+    # session_id stays in the header — header.session_id is identity, chain_id is grouping.
+    assert record["header"]["session_id"] == "sess-from-payload"
+
+
+def test_cli_hook_record_no_flag_falls_back_to_env(
+    tmp_path: Path,
+    key_files: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without --chain-id, AGENT_AUDIT_CHAIN_ID still wins over session_id."""
+    priv, pub = key_files
+    audit_dir = tmp_path / "audit"
+    monkeypatch.setenv("AGENT_AUDIT_DIR", str(audit_dir))
+    monkeypatch.setenv("AGENT_AUDIT_SIGNING_KEY", str(priv))
+    monkeypatch.setenv("AGENT_AUDIT_PUBKEY", str(pub))
+    monkeypatch.setenv("AGENT_AUDIT_CHAIN_ID", "from-env-only")
+
+    payload = json.dumps(
+        {
+            "hook_event_name": "PostToolUse",
+            "session_id": "sess-x",
+            "tool_name": "Read",
+            "tool_input": {},
+            "tool_response": "",
+        }
+    )
+    runner = CliRunner()
+    result = runner.invoke(cli, ["hook-record"], input=payload)
+    assert result.exit_code == 0
+
+    record = json.loads(
+        next(audit_dir.glob("audit-*.jsonl")).read_text().splitlines()[0]
+    )
+    assert record["envelope"]["chain_id"] == "from-env-only"
+
+
 def test_cli_hook_record_subagent_dispatch_via_task_tool(
     tmp_path: Path,
     key_files: tuple[Path, Path],
