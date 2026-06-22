@@ -1,4 +1,4 @@
-# SIGNING.md — agent-audit canonical signing form
+# SIGNING.md — ai-agent-audit canonical signing form
 
 _Version: v1.0. Status: stable for the v0.1 release._
 

@@ -1,12 +1,12 @@
-# agent-audit — Scope Statement
+# ai-agent-audit — Scope Statement
 
 _v0.1, 2026-06-19. Written BEFORE the code so we don't drift._
 
-This is the contract with anyone who reads the README, opens an issue, or considers using agent-audit for evidence purposes.
+This is the contract with anyone who reads the README, opens an issue, or considers using ai-agent-audit for evidence purposes.
 
 ---
 
-## What agent-audit IS
+## What ai-agent-audit IS
 
 A Python library that captures **cryptographically-linked records of every tool call** an AI agent makes (LangGraph, MCP — Claude Agent SDK / OpenAI Agents SDK adapters land in v0.2).
 
@@ -14,7 +14,7 @@ Each record contains: tool identity, MCP server info, input args (PII-redacted),
 
 Records are JSON Lines. They're verifiable offline with a CLI that anyone — including an auditor — can run with only the public key.
 
-## What agent-audit IS NOT (and won't claim to be in v0.1)
+## What ai-agent-audit IS NOT (and won't claim to be in v0.1)
 
 ### NOT a regulatory-grade evidence system (v0.2 target)
 
@@ -28,7 +28,7 @@ Until those three land, the honest framing is **"cryptographically-linked record
 
 ### NOT a coverage of these AI controls (any version)
 
-agent-audit covers ONE control area: evidence of what tool calls an AI agent made, with integrity guarantees on that evidence.
+ai-agent-audit covers ONE control area: evidence of what tool calls an AI agent made, with integrity guarantees on that evidence.
 
 It does NOT cover, and is not designed to cover:
 
@@ -43,7 +43,7 @@ It does NOT cover, and is not designed to cover:
 9. **Model cards** — model intended use, limitations, evaluation. Documentation artifact.
 10. **Fairness / bias assessment** — protected class outcome analysis. Eval tooling + statistical testing.
 
-If an auditor asks about any of these, the answer is not "we have agent-audit." The answer is the specific tool or process that covers it. agent-audit slots in alongside those — it doesn't replace them.
+If an auditor asks about any of these, the answer is not "we have ai-agent-audit." The answer is the specific tool or process that covers it. ai-agent-audit slots in alongside those — it doesn't replace them.
 
 ## Where it fits in the compliance stack
 
@@ -57,20 +57,20 @@ For an AI startup selling to regulated B2B buyers:
 ├───────────────────────────────────────────────────┤
 │ Vendor risk + DLP + SSO                            │  ← perimeter & people
 ├───────────────────────────────────────────────────┤
-│ ★ agent-audit                                      │  ← runtime evidence of agent tool calls
+│ ★ ai-agent-audit                                      │  ← runtime evidence of agent tool calls
 ├───────────────────────────────────────────────────┤
 │ MCP servers / LangGraph / Claude Agent SDK         │  ← the agents themselves
 └───────────────────────────────────────────────────┘
 ```
 
-agent-audit produces the artifact other layers cite when an auditor asks **"prove what your AI agents actually did."**
+ai-agent-audit produces the artifact other layers cite when an auditor asks **"prove what your AI agents actually did."**
 
 ## The honesty test
 
 Before shipping the README, ask:
 
-1. Could a SOC 2 auditor, after reading this README, conclude that agent-audit alone makes a system SOC 2 compliant? **If yes, the README is wrong.**
-2. Could a customer integrate agent-audit and then claim EU AI Act Article 12 compliance? **If yes, the README is wrong.**
-3. Could a customer use agent-audit's logs as primary evidence in an external audit today (v0.1)? **If yes — only if they also have sidecar signer, S3 Object Lock, and external anchor running. v0.1 alone doesn't ship those. Say so.**
+1. Could a SOC 2 auditor, after reading this README, conclude that ai-agent-audit alone makes a system SOC 2 compliant? **If yes, the README is wrong.**
+2. Could a customer integrate ai-agent-audit and then claim EU AI Act Article 12 compliance? **If yes, the README is wrong.**
+3. Could a customer use ai-agent-audit's logs as primary evidence in an external audit today (v0.1)? **If yes — only if they also have sidecar signer, S3 Object Lock, and external anchor running. v0.1 alone doesn't ship those. Say so.**
 
-The right framing is: **"agent-audit provides one component of the evidence pipeline. It is forward-compatible with regulatory-grade evidence; v0.1 is the foundation, v0.2 adds the production hardening."**
+The right framing is: **"ai-agent-audit provides one component of the evidence pipeline. It is forward-compatible with regulatory-grade evidence; v0.1 is the foundation, v0.2 adds the production hardening."**

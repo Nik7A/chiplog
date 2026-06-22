@@ -1,8 +1,8 @@
-# agent-audit
+# ai-agent-audit
 
 Cryptographically-linked records of AI agent tool calls. Forward-compatible foundation for SOC 2 / ISO 42001 / EU AI Act Article 12 evidence — v0.1 is dogfooding-grade, v0.2 is the regulatory hardening.
 
-**Status:** v0.1 developer preview. Looking for one design partner. Read the Scope section and the v0.1 limits before opening an issue.
+**Status:** v0.1 developer preview, currently running on a daemon-driven Claude Code agent system in production. Looking for one design partner. Read the Scope section and the v0.1 limits before opening an issue.
 
 ---
 
@@ -20,9 +20,9 @@ Direct MCP-from-Python (without Claude CLI) lands in v0.2. Claude Agent SDK + Op
 ## What this isn't
 
 - **Not an observability product.** If you want span-level tracing, eval harnesses, or token cost graphs, use LangSmith, Langfuse, or Datadog Agent Observability. Those produce dashboards. This produces records.
-- **Not a GRC platform.** Vanta, Drata, and friends map controls to frameworks. agent-audit produces an artifact those controls can cite. They live upstream of this.
+- **Not a GRC platform.** Vanta, Drata, and friends map controls to frameworks. ai-agent-audit produces an artifact those controls can cite. They live upstream of this.
 - **Not a SOC 2 magic button.** Your auditor still decides what's acceptable. v0.1 makes the conversation easier; v0.2 is what survives it.
-- **Not a coverage of:** model provenance, training data lineage, eval evidence, prompt change management, vendor risk, IR runbooks, DPIA, HITL SOPs, model cards, fairness. See [SCOPE_STATEMENT.md](SCOPE_STATEMENT.md). agent-audit covers one control area.
+- **Not a coverage of:** model provenance, training data lineage, eval evidence, prompt change management, vendor risk, IR runbooks, DPIA, HITL SOPs, model cards, fairness. See [SCOPE_STATEMENT.md](SCOPE_STATEMENT.md). ai-agent-audit covers one control area.
 
 ## v0.1 — what's honest about it
 
@@ -161,7 +161,7 @@ This library is the foundation I wanted to build before I shipped that conversat
 
 **Later (when standards stabilize):** prEN 18229-1 export profile, CEN-CENELEC harmonised standards alignment. Tentatively CEN-CENELEC delivery is Q4 2026.
 
-**Not on roadmap:** dashboards, alerting, eval, model governance, training data lineage. Use a real observability tool for those. agent-audit covers one control area on purpose.
+**Not on roadmap:** dashboards, alerting, eval, model governance, training data lineage. Use a real observability tool for those. ai-agent-audit covers one control area on purpose.
 
 ## Looking for ONE design partner before v0.2
 
