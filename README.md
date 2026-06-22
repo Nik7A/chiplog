@@ -178,7 +178,7 @@ In exchange for early integration help and steering the record format, you get v
 
 ## Author
 
-Nikolai Semernia. Software engineer, 10 years in. Most recently 8 years at Scompler in Munich (Senior Eng → Head of Engineering, 6 teams, ~40 people), led the program through ISO 27001 + TISAX certification. Now solo, building agent systems full-time from Cyprus.
+By **Nikolai Semernia**. Built this because I wanted compliance-grade audit logs for my own autonomous agent system, and the existing observability tools weren't designed for that. Previously led an engineering org through ISO 27001 + TISAX certification — that's where I learned what auditors actually want to see.
 
 [LinkedIn](https://www.linkedin.com/in/nikolai-semernia) · [Email](mailto:nsemernia@gmail.com) · [Site](https://semernia.dev) _(coming)_
 
