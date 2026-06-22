@@ -1,5 +1,6 @@
 {
-  "_comment": "Drop this into ~/.claude/settings.json (or merge into your existing one). Every tool call from `claude`, `claude --bg`, and Claude Code subagents will be recorded to ~/.config/agent-audit/audit-YYYY-MM-DD.jsonl. Verify with `agent-audit verify <log> --pubkey ~/.config/agent-audit/signing.pub`.",
+  "_comment_1": "Drop this hooks block into ~/.claude/settings.json (or ~/.claude-<scope>/settings.json for a scoped Claude Code install). Every tool call from `claude`, `claude --bg`, and Claude Code subagents writes a signed record to ~/.config/agent-audit/audit-YYYY-MM-DD.jsonl. Verify offline with `agent-audit verify <log> --pubkey ~/.config/agent-audit/signing.pub`.",
+  "_comment_2": "The command path here assumes agent-audit is on PATH (pipx / uv tool install / activated venv). If it isn't, replace with one of: (a) `python -m agent_audit.cli hook-record` — works whenever Python can import agent_audit; (b) full path like `/path/to/.venv/bin/agent-audit hook-record` — always works regardless of shell setup. Add `--chain-id <name>` to keep all records under one linked chain (recommended for daemons that span many sessions).",
   "hooks": {
     "PostToolUse": [
       {
