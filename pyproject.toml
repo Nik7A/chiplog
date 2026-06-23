@@ -1,6 +1,6 @@
 [project]
 name = "agent-audit"
-version = "0.1.0"
+version = "0.1.1"
 description = "Cryptographically-linked records of AI agent tool calls. Forward-compatible foundation for SOC 2 / ISO 42001 / EU AI Act Article 12 evidence."
 authors = [
     { name = "Nikolay Semernya", email = "nsemernia@gmail.com" }
@@ -34,6 +34,7 @@ dev = [
     "langgraph>=1.2",
     "mcp>=1.20",
     "mypy>=1.18",
+    "openai-agents>=0.17.6",
     "pytest>=8.3",
     "pytest-asyncio>=0.25",
     "pytest-benchmark>=4.0",

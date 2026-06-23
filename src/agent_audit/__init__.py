@@ -26,7 +26,7 @@ from agent_audit.sinks.base import (
 )
 from agent_audit.sinks.local_file import LocalFileSink
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "AuditRecorder",
