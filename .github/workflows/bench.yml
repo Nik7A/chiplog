@@ -1,0 +1,35 @@
+name: bench
+
+# The benchmarks are NOT a gate. They are timing measurements, and a shared
+# runner's numbers mean nothing next to the figures in BENCHMARKS.md, which are
+# taken on fixed hardware.
+#
+# This job exists because the suite rotted silently: bench/ stopped running the
+# day `outcome` became a required argument, and nothing noticed until someone
+# went looking weeks later, while README kept quoting throughput measured
+# against the old code. A weekly run catches that within a week.
+#
+# Numbers printed here are for "does it still run", not for publication.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"  # Mondays, 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Sync
+        run: uv sync
+
+      - name: Run benchmarks
+        run: uv run pytest bench/ -q

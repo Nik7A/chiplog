@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      # No --locked: uv.lock is gitignored on purpose. This is a library, so
+      # pyproject declares floors, not pins, and CI should resolve them the way
+      # a user's install will. The trade-off is that a new transitive release
+      # can turn this red with no change here — for a library that is a signal
+      # about a wrong floor, not noise.
+      - name: Sync
+        run: uv sync
+
+      # bench/ is excluded: testpaths in pyproject is ["tests"], and the
+      # benchmarks are timing measurements that mean nothing on a shared
+      # runner. They run in bench.yml on a schedule instead.
+      - name: Tests
+        run: uv run pytest -q
+
+      - name: Types
+        run: uv run mypy --strict src/
+
+      - name: Lint
+        run: uv run ruff check src/ tests/

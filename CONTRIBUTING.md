@@ -16,9 +16,13 @@ Register the same public key at https://github.com/settings/keys with type **Sig
 
 If your PR has unsigned commits, the maintainer may squash-merge it to land your work — GitHub signs the squashed commit on its end. For substantive multi-commit work, please sign your own commits so the authorship trail is preserved.
 
-## Linear history
+## How changes land
 
-`main` is fast-forward-only. Merge commits are blocked. Rebase your branch onto `main` before opening a PR; the maintainer does the final fast-forward push.
+`main` takes merge commits. Rebase your branch onto `main` before opening a PR so the diff is honest and CI tests what will actually land, but the maintainer merges with the button rather than a fast-forward push.
+
+That last part is a GitHub constraint, not a preference: with signed commits required, rebase-merge is impossible (GitHub rewrites the commits, which voids their signatures, and it cannot re-sign them), and squash-merge would collapse a multi-commit PR into one. A merge commit keeps your commits and their signatures, and GitHub signs the merge itself. `git log --first-parent` reads as one entry per PR.
+
+Force-pushes to `main` and branch deletion are blocked.
 
 ## What's in scope
 
