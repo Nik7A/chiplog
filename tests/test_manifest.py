@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_audit.manifest import (
+from chiplog.manifest import (
     MANIFEST_SCHEMA_VERSION,
     ChainState,
     FileChecksum,

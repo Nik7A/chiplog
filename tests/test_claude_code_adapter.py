@@ -7,7 +7,7 @@ Covers:
 - emit_from_hook writes a verifiable signed record + populates manifest
 - Two consecutive hook invocations share a chain via the manifest
   (the central Claude Code "fresh process per tool call" scenario)
-- AGENT_AUDIT_CHAIN_ID env overrides session-scoped chains (Nikolai's daemon)
+- CHIPLOG_CHAIN_ID env overrides session-scoped chains (Nikolai's daemon)
 - CLI hook-record subcommand: stdin → JSONL line + exit 0
 - Concurrent CLI hook-record invocations don't corrupt the chain (flock works)
 - A Bash call the CLI backgrounds on timeout records `unobserved`, not `success`
@@ -30,7 +30,7 @@ from cryptography.hazmat.primitives.serialization import (
     PublicFormat,
 )
 
-from agent_audit.adapters.claude_code import (
+from chiplog.adapters.claude_code import (
     HookConfig,
     HookInput,
     emit_from_hook,
@@ -38,10 +38,10 @@ from agent_audit.adapters.claude_code import (
     parse_hook_input,
     serialize_tool_response,
 )
-from agent_audit.cli import cli
-from agent_audit.integrity import compute_chain_link, verify_record
-from agent_audit.keys import compute_key_id
-from agent_audit.manifest import Manifest
+from chiplog.cli import cli
+from chiplog.integrity import compute_chain_link, verify_record
+from chiplog.keys import compute_key_id
+from chiplog.manifest import Manifest
 
 
 # ---------------------------------------------------------------------------
@@ -261,7 +261,7 @@ def test_two_hook_invocations_share_chain_via_manifest(
 def test_chain_id_env_override_creates_global_chain(
     tmp_path: Path, key_files: tuple[Path, Path]
 ) -> None:
-    """AGENT_AUDIT_CHAIN_ID overrides session-scoped chains — used by
+    """CHIPLOG_CHAIN_ID overrides session-scoped chains — used by
     Nikolai's daemon to keep one global chain across many sessions."""
     priv, pub = key_files
     audit_dir = tmp_path / "audit"
@@ -288,7 +288,7 @@ def test_emit_populates_pubkey_pem_in_manifest(
     tmp_path: Path, key_files: tuple[Path, Path]
 ) -> None:
     """The manifest must carry the pubkey PEM so a verifier needs nothing
-    but the audit dir to run `agent-audit verify`."""
+    but the audit dir to run `chiplog verify`."""
     priv, pub = key_files
     audit_dir = tmp_path / "audit"
     config = HookConfig(audit_dir=audit_dir, signing_key_path=priv, pubkey_path=pub)
@@ -531,7 +531,7 @@ def test_emit_from_hook_never_records_non_post_tool_use_events(
 def test_both_claude_adapters_share_one_event_allowlist() -> None:
     """The two adapters read the same runtime's payloads. The rule that decides
     which events describe a completed tool call must have exactly one home."""
-    from agent_audit.adapters import _claude_hooks
+    from chiplog.adapters import _claude_hooks
 
     assert _claude_hooks.is_recordable_event("PostToolUse")
     assert _claude_hooks.is_recordable_event("PostToolUseFailure")
@@ -549,9 +549,9 @@ def test_cli_hook_record_handles_failure_payload(
     """End-to-end through the real hook entry point the CLI invokes."""
     priv, pub = key_files
     audit_dir = tmp_path / "audit"
-    monkeypatch.setenv("AGENT_AUDIT_DIR", str(audit_dir))
-    monkeypatch.setenv("AGENT_AUDIT_SIGNING_KEY", str(priv))
-    monkeypatch.setenv("AGENT_AUDIT_PUBKEY", str(pub))
+    monkeypatch.setenv("CHIPLOG_DIR", str(audit_dir))
+    monkeypatch.setenv("CHIPLOG_SIGNING_KEY", str(priv))
+    monkeypatch.setenv("CHIPLOG_PUBKEY", str(pub))
 
     payload = json.dumps(
         {
@@ -821,9 +821,9 @@ def test_cli_hook_record_handles_backgrounded_timeout_payload(
     verbatim probe payload on stdin."""
     priv, pub = key_files
     audit_dir = tmp_path / "audit"
-    monkeypatch.setenv("AGENT_AUDIT_DIR", str(audit_dir))
-    monkeypatch.setenv("AGENT_AUDIT_SIGNING_KEY", str(priv))
-    monkeypatch.setenv("AGENT_AUDIT_PUBKEY", str(pub))
+    monkeypatch.setenv("CHIPLOG_DIR", str(audit_dir))
+    monkeypatch.setenv("CHIPLOG_SIGNING_KEY", str(priv))
+    monkeypatch.setenv("CHIPLOG_PUBKEY", str(pub))
 
     payload = json.dumps(
         {
@@ -863,7 +863,7 @@ def test_cli_hook_record_handles_backgrounded_timeout_payload(
 
 def test_from_env_defaults_to_user_config_dir() -> None:
     config = HookConfig.from_env({})
-    assert str(config.audit_dir).endswith("/.config/agent-audit")
+    assert str(config.audit_dir).endswith("/.config/chiplog")
     assert config.signing_key_path.name == "signing.key"
     assert config.chain_id_override is None
 
@@ -871,8 +871,8 @@ def test_from_env_defaults_to_user_config_dir() -> None:
 def test_from_env_respects_overrides(tmp_path: Path) -> None:
     config = HookConfig.from_env(
         {
-            "AGENT_AUDIT_DIR": str(tmp_path),
-            "AGENT_AUDIT_CHAIN_ID": "my-chain",
+            "CHIPLOG_DIR": str(tmp_path),
+            "CHIPLOG_CHAIN_ID": "my-chain",
         }
     )
     assert config.audit_dir == tmp_path
@@ -892,9 +892,9 @@ def test_cli_hook_record_writes_and_exits_0(
 ) -> None:
     priv, pub = key_files
     audit_dir = tmp_path / "audit"
-    monkeypatch.setenv("AGENT_AUDIT_DIR", str(audit_dir))
-    monkeypatch.setenv("AGENT_AUDIT_SIGNING_KEY", str(priv))
-    monkeypatch.setenv("AGENT_AUDIT_PUBKEY", str(pub))
+    monkeypatch.setenv("CHIPLOG_DIR", str(audit_dir))
+    monkeypatch.setenv("CHIPLOG_SIGNING_KEY", str(priv))
+    monkeypatch.setenv("CHIPLOG_PUBKEY", str(pub))
 
     payload = json.dumps(
         {
@@ -923,10 +923,10 @@ def test_cli_hook_record_chain_id_flag_overrides_session(
     """`--chain-id` on the CLI overrides session-scoped chains and beats env."""
     priv, pub = key_files
     audit_dir = tmp_path / "audit"
-    monkeypatch.setenv("AGENT_AUDIT_DIR", str(audit_dir))
-    monkeypatch.setenv("AGENT_AUDIT_SIGNING_KEY", str(priv))
-    monkeypatch.setenv("AGENT_AUDIT_PUBKEY", str(pub))
-    monkeypatch.setenv("AGENT_AUDIT_CHAIN_ID", "from-env")
+    monkeypatch.setenv("CHIPLOG_DIR", str(audit_dir))
+    monkeypatch.setenv("CHIPLOG_SIGNING_KEY", str(priv))
+    monkeypatch.setenv("CHIPLOG_PUBKEY", str(pub))
+    monkeypatch.setenv("CHIPLOG_CHAIN_ID", "from-env")
 
     payload = json.dumps(
         {
@@ -957,13 +957,13 @@ def test_cli_hook_record_no_flag_falls_back_to_env(
     key_files: tuple[Path, Path],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Without --chain-id, AGENT_AUDIT_CHAIN_ID still wins over session_id."""
+    """Without --chain-id, CHIPLOG_CHAIN_ID still wins over session_id."""
     priv, pub = key_files
     audit_dir = tmp_path / "audit"
-    monkeypatch.setenv("AGENT_AUDIT_DIR", str(audit_dir))
-    monkeypatch.setenv("AGENT_AUDIT_SIGNING_KEY", str(priv))
-    monkeypatch.setenv("AGENT_AUDIT_PUBKEY", str(pub))
-    monkeypatch.setenv("AGENT_AUDIT_CHAIN_ID", "from-env-only")
+    monkeypatch.setenv("CHIPLOG_DIR", str(audit_dir))
+    monkeypatch.setenv("CHIPLOG_SIGNING_KEY", str(priv))
+    monkeypatch.setenv("CHIPLOG_PUBKEY", str(pub))
+    monkeypatch.setenv("CHIPLOG_CHAIN_ID", "from-env-only")
 
     payload = json.dumps(
         {
@@ -994,10 +994,10 @@ def test_cli_hook_record_subagent_dispatch_via_task_tool(
     their OWN hooks with the subagent's session_id."""
     priv, pub = key_files
     audit_dir = tmp_path / "audit"
-    monkeypatch.setenv("AGENT_AUDIT_DIR", str(audit_dir))
-    monkeypatch.setenv("AGENT_AUDIT_SIGNING_KEY", str(priv))
-    monkeypatch.setenv("AGENT_AUDIT_PUBKEY", str(pub))
-    monkeypatch.setenv("AGENT_AUDIT_CHAIN_ID", "daemon-global")
+    monkeypatch.setenv("CHIPLOG_DIR", str(audit_dir))
+    monkeypatch.setenv("CHIPLOG_SIGNING_KEY", str(priv))
+    monkeypatch.setenv("CHIPLOG_PUBKEY", str(pub))
+    monkeypatch.setenv("CHIPLOG_CHAIN_ID", "daemon-global")
 
     parent = json.dumps(
         {
@@ -1042,7 +1042,7 @@ def test_cli_hook_record_subagent_dispatch_via_task_tool(
 def test_concurrent_cli_hook_record_via_subprocesses_serializes_via_flock(
     tmp_path: Path, key_files: tuple[Path, Path]
 ) -> None:
-    """Real subprocess concurrency: spawn 5 `agent-audit hook-record`
+    """Real subprocess concurrency: spawn 5 `chiplog hook-record`
     processes simultaneously and check the chain validates end-to-end
     with all 5 records present.
 
@@ -1056,10 +1056,10 @@ def test_concurrent_cli_hook_record_via_subprocesses_serializes_via_flock(
 
     env = {
         **{k: v for k, v in __import__("os").environ.items()},
-        "AGENT_AUDIT_DIR": str(audit_dir),
-        "AGENT_AUDIT_SIGNING_KEY": str(priv),
-        "AGENT_AUDIT_PUBKEY": str(pub),
-        "AGENT_AUDIT_CHAIN_ID": "concurrent-test",
+        "CHIPLOG_DIR": str(audit_dir),
+        "CHIPLOG_SIGNING_KEY": str(priv),
+        "CHIPLOG_PUBKEY": str(pub),
+        "CHIPLOG_CHAIN_ID": "concurrent-test",
     }
 
     payloads = [
@@ -1077,7 +1077,7 @@ def test_concurrent_cli_hook_record_via_subprocesses_serializes_via_flock(
 
     procs = [
         subprocess.Popen(
-            [sys.executable, "-m", "agent_audit.cli", "hook-record"],
+            [sys.executable, "-m", "chiplog.cli", "hook-record"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -1103,7 +1103,7 @@ def test_concurrent_cli_hook_record_via_subprocesses_serializes_via_flock(
         [
             sys.executable,
             "-m",
-            "agent_audit.cli",
+            "chiplog.cli",
             "verify",
             str(jsonl),
             "--pubkey",
@@ -1244,7 +1244,7 @@ def test_emit_from_hook_user_denial_records_denied_with_gate(
     """THE FIX. A denied tool call → outcome=denied, a Gate(DENY) with matching
     policy_id, output.body=None, and it SIGNS and VERIFIES (the cross-field
     validator Payload._outcome_agrees_with_policy is satisfied)."""
-    from agent_audit.adapters._claude_hooks import PERMISSION_DENIED_POLICY_ID
+    from chiplog.adapters._claude_hooks import PERMISSION_DENIED_POLICY_ID
 
     priv, pub = key_files
     audit_dir = tmp_path / "audit"
@@ -1291,7 +1291,7 @@ def test_emit_from_hook_permission_denied_family_also_maps_to_denied(
     """The honest superset: the `Permission for this tool use was denied.` family
     (which fires only PreToolUse on 2.1.207 and normally never reaches a recording
     hook) is STILL a denial if it ever arrives here."""
-    from agent_audit.adapters._claude_hooks import PERMISSION_DENIED_POLICY_ID
+    from chiplog.adapters._claude_hooks import PERMISSION_DENIED_POLICY_ID
 
     priv, pub = key_files
     config = HookConfig(
@@ -1346,7 +1346,7 @@ def test_denial_marker_is_pinned_to_probed_cli_version() -> None:
     prefixes in adapters/_claude_hooks._DENIAL_ERROR_PREFIXES, and update the
     pinned version here — do NOT loosen the match.
     """
-    from agent_audit.adapters import _claude_hooks
+    from chiplog.adapters import _claude_hooks
 
     assert _claude_hooks._PROBED_CLI_VERSION == "2.1.207"
     assert _claude_hooks._DENIAL_ERROR_PREFIXES == (
@@ -1363,7 +1363,7 @@ def test_denial_marker_is_pinned_to_probed_cli_version() -> None:
 def test_is_user_denial_does_not_match_failures_or_interrupts() -> None:
     """Anchored, not loose. The predicate matches ONLY the rejection lead-sentence
     — never a genuine failure, a genuine interrupt, or a bare keyword."""
-    from agent_audit.adapters._claude_hooks import is_user_denial
+    from chiplog.adapters._claude_hooks import is_user_denial
 
     assert not is_user_denial("Exit code 1")
     assert not is_user_denial("[Request interrupted by user]")

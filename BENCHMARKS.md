@@ -109,7 +109,7 @@ Pre-populated 10 000-record corpus.
 
 Per-record verification is **unchanged** — v0.2 added nothing to the signature check.
 
-`verify_tree` is the auditor-facing path and has no v0.1 counterpart: it loads and cross-checks the manifest, digests every file with a **second full streaming sha256 pass**, walks each chain, and reconstructs the canonical form — from disk. It is ~30 % below the in-memory per-record rate. That is not a regression; it is a set of checks v0.1 did not perform. `agent-audit verify <dir>` runs this path, so this is the number an auditor's wall clock actually sees:
+`verify_tree` is the auditor-facing path and has no v0.1 counterpart: it loads and cross-checks the manifest, digests every file with a **second full streaming sha256 pass**, walks each chain, and reconstructs the canonical form — from disk. It is ~30 % below the in-memory per-record rate. That is not a regression; it is a set of checks v0.1 did not perform. `chiplog verify <dir>` runs this path, so this is the number an auditor's wall clock actually sees:
 
 | Chain size | `verify_tree` wall time (M2 Max) |
 | --- | --- |

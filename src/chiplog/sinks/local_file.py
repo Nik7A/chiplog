@@ -30,9 +30,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from agent_audit.integrity import compute_chain_link
-from agent_audit.manifest import ChainState, FileChecksum, Manifest
-from agent_audit.sinks.base import DiskFullError, SinkError
+from chiplog.integrity import compute_chain_link
+from chiplog.manifest import ChainState, FileChecksum, Manifest
+from chiplog.sinks.base import DiskFullError, SinkError
 
 _F_FULLFSYNC = 51  # macOS-specific fcntl constant
 
@@ -106,7 +106,7 @@ class LocalFileSink:
         dir: Output directory. Created if absent. Holds the JSONL files +
             `manifest.json`.
         pubkey_pem: Public key PEM bytes recorded in the manifest so an
-            offline verifier can run `agent-audit verify` with no other
+            offline verifier can run `chiplog verify` with no other
             inputs. Optional but strongly recommended.
         redaction_disabled: Record in the manifest that the recorder is
             using `RedactionConfig(disable=True)`. Forced visible by the

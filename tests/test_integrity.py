@@ -29,15 +29,15 @@ from cryptography.hazmat.primitives.serialization import (
     load_pem_public_key,
 )
 
-from agent_audit.canonical import canonical_for_signing
-from agent_audit.integrity import (
+from chiplog.canonical import canonical_for_signing
+from chiplog.integrity import (
     VerificationFailure,
     compute_chain_link,
     compute_record_hash,
     sign_record,
     verify_record,
 )
-from agent_audit.keys import (
+from chiplog.keys import (
     SigningKey,
     compute_key_id,
     load_public_key,

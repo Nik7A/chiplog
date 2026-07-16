@@ -1,4 +1,4 @@
-# SIGNING.md — ai-agent-audit canonical signing form
+# SIGNING.md — chiplog canonical signing form
 
 _Version: v1.0. Status: stable for the v0.1 release._
 
@@ -243,8 +243,8 @@ A real trail is not one file signed by one key. A logical chain spans many daily
 `audit-YYYY-MM-DD.jsonl` files (a chain started before UTC midnight keeps its
 `chain_id` and continues into the next day's file), signing keys rotate
 mid-chain, and the authority on *which* records form the canonical chain is the
-sidecar `manifest.json`, **not** the tool. `agent-audit verify <DIR>` handles
-this; `agent-audit verify <FILE> --pubkey P` remains the unchanged single-file,
+sidecar `manifest.json`, **not** the tool. `chiplog verify <DIR>` handles
+this; `chiplog verify <FILE> --pubkey P` remains the unchanged single-file,
 sequential, log-only contract of §7.
 
 **File ordering.** Files are walked in lexical filename order, which for
@@ -413,7 +413,7 @@ A test failure here means the canonical form drifted — usually one of:
 
 `schema_version` and `sig_form_version` are independent semver strings stored in each record's envelope. Verifiers MUST dispatch on `sig_form_version` for canonicalization rules, schema_version for field interpretation.
 
-For v0.1 both are `"v1.0"`. Future major changes (`v2.0`) get new canonicalization rules in `agent_audit.canonical` and new schema models in `agent_audit.schema.v2`. Old records remain verifiable forever because their version string self-describes the rules.
+For v0.1 both are `"v1.0"`. Future major changes (`v2.0`) get new canonicalization rules in `chiplog.canonical` and new schema models in `chiplog.schema.v2`. Old records remain verifiable forever because their version string self-describes the rules.
 
 ### 9.1 Schema evolution and backward verifiability
 
@@ -469,12 +469,12 @@ break) and others are **silently laundered** by `model_dump` before signing
 (`bytes` → a decoded str, `nan` → `null`, `set` → list, and `{None: 'a', 'None':
 'b'}` → `{'None': 'b'}` with one value destroyed) — then signed as if genuine.
 
-A normalization pass (`agent_audit.normalize`) runs **after redaction** on the
+A normalization pass (`chiplog.normalize`) runs **after redaction** on the
 three free-form fields (`input`, `output.body`, `outcome.message`) and replaces
 each JCS-hostile scalar with a self-describing marker:
 
 ```json
-{"__agent_audit__": "unrepresentable", "reason": "integer_out_of_jcs_domain",
+{"__chiplog__": "unrepresentable", "reason": "integer_out_of_jcs_domain",
  "py_type": "int", "sha256": "<hex sha256(repr(value))>"}
 ```
 
@@ -528,7 +528,7 @@ record simply omits it and canonicalizes exactly as before.
   token?}`. Precision is sacrificed to avoid leaking the un-matched remainder.
 - **Dict KEYS are inspected, not just values.** A dict keyed by PII (a patient
   email) has its key replaced with an unforgeable sentinel
-  (`__agent_audit_redacted_key__::<token>::<policy>`); the key material never
+  (`__chiplog_redacted_key__::<token>::<policy>`); the key material never
   reaches the signed bytes.
 - **Most-restrictive rule wins.** When several rules match one value, a
   `strip_hash=True` rule always beats a hashing rule. So a secret co-occurring

@@ -21,7 +21,7 @@ from click.testing import CliRunner
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
-from agent_audit.cli import (
+from chiplog.cli import (
     EXIT_CHAIN_BREAK,
     EXIT_EMPTY,
     EXIT_KEY_RESOLUTION,
@@ -31,12 +31,12 @@ from agent_audit.cli import (
     cli,
     cmd_inspect,
 )
-from agent_audit.emit import AuditRecorder
-from agent_audit.keys import SigningKey, compute_key_id
-from agent_audit.report import format_json_report, format_text_report
-from agent_audit.schema.v1 import NoGateReason, Output, ToolCall, success, ungated
-from agent_audit.sinks.local_file import LocalFileSink
-from agent_audit.verify import ChainCheckOutcome, verify_log
+from chiplog.emit import AuditRecorder
+from chiplog.keys import SigningKey, compute_key_id
+from chiplog.report import format_json_report, format_text_report
+from chiplog.schema.v1 import NoGateReason, Output, ToolCall, success, ungated
+from chiplog.sinks.local_file import LocalFileSink
+from chiplog.verify import ChainCheckOutcome, verify_log
 
 
 # ---------------------------------------------------------------------------

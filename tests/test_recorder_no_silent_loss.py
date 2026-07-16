@@ -17,11 +17,11 @@ import math
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from agent_audit.emit import AuditRecorder, RecordSigningError
-from agent_audit.integrity import verify_record
-from agent_audit.keys import SigningKey, compute_key_id
-from agent_audit.normalize import MARKER_KEY
-from agent_audit.schema.v1 import (
+from chiplog.emit import AuditRecorder, RecordSigningError
+from chiplog.integrity import verify_record
+from chiplog.keys import SigningKey, compute_key_id
+from chiplog.normalize import MARKER_KEY
+from chiplog.schema.v1 import (
     NoGateReason,
     Output,
     ToolCall,
@@ -29,7 +29,7 @@ from agent_audit.schema.v1 import (
     success,
     ungated,
 )
-from agent_audit.sinks.base import InMemorySink
+from chiplog.sinks.base import InMemorySink
 
 
 def _signing_key() -> SigningKey:
@@ -189,7 +189,7 @@ async def test_silent_loss_now_leaves_a_chain_break_trace() -> None:
         outcome=success(),
     )
 
-    from agent_audit.integrity import compute_chain_link
+    from chiplog.integrity import compute_chain_link
 
     # c does NOT chain onto a — the dropped record poisoned the head, so the gap
     # is visible as a chain break rather than an invisible hole.

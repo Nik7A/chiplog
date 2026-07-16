@@ -15,11 +15,11 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from pydantic import ValidationError
 
-from agent_audit.emit import AuditRecorder, RecordBuildError
-from agent_audit.integrity import compute_chain_link, verify_record
-from agent_audit.keys import SigningKey, compute_key_id
-from agent_audit.normalize import MARKER_KEY
-from agent_audit.schema.v1 import (
+from chiplog.emit import AuditRecorder, RecordBuildError
+from chiplog.integrity import compute_chain_link, verify_record
+from chiplog.keys import SigningKey, compute_key_id
+from chiplog.normalize import MARKER_KEY
+from chiplog.schema.v1 import (
     LifecycleEventPayload,
     LifecyclePhase,
     NodeTransition,
@@ -32,7 +32,7 @@ from agent_audit.schema.v1 import (
     route_transition,
     success,
 )
-from agent_audit.sinks.base import InMemorySink
+from chiplog.sinks.base import InMemorySink
 
 
 def _signing_key() -> SigningKey:
@@ -178,7 +178,7 @@ async def test_uncanonicalizable_attribute_poisons_chain_not_silent() -> None:
     """The area-1 guarantee, now for record_event: a value signing cannot encode
     (a lone surrogate) raises a typed error AND poisons the head, so the next
     record breaks the chain instead of the loss vanishing."""
-    from agent_audit.emit import RecordSigningError
+    from chiplog.emit import RecordSigningError
 
     sink = InMemorySink()
     rec = _recorder(sink)
@@ -222,7 +222,7 @@ def test_record_event_sync_twin_exists_and_records() -> None:
 def test_lifecycle_payload_rejects_unknown_field_extra_forbid() -> None:
     """A policy/risk/outcome must never be smuggled into a lifecycle record via an extra field."""
     from pydantic import ValidationError
-    from agent_audit.schema.v1 import LifecycleEventPayload, LifecyclePhase
+    from chiplog.schema.v1 import LifecycleEventPayload, LifecyclePhase
 
     ok = LifecycleEventPayload(
         time={"ts_utc": "2026-07-15T00:00:00.000000000Z", "ts_monotonic_ns": "1"},  # type: ignore[arg-type]

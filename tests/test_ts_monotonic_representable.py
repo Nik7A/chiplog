@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import rfc8785
 
-from agent_audit.schema.v1 import (
+from chiplog.schema.v1 import (
     SCHEMA_VERSION,
     NoGateReason,
     Output,

@@ -17,17 +17,17 @@ from pathlib import Path
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from agent_audit.emit import AuditRecorder
-from agent_audit.keys import SigningKey, compute_key_id
-from agent_audit.schema.v1 import (
+from chiplog.emit import AuditRecorder
+from chiplog.keys import SigningKey, compute_key_id
+from chiplog.schema.v1 import (
     OutcomeContext,
     PolicyContext,
     PolicyUnobservedReason,
     policy_unobserved,
     success,
 )
-from agent_audit.sinks.base import InMemorySink
-from agent_audit.sinks.local_file import LocalFileSink
+from chiplog.sinks.base import InMemorySink
+from chiplog.sinks.local_file import LocalFileSink
 
 # The bench models a plain successful tool call with no gate mechanism in front
 # of it. Both fields are REQUIRED by `record()` and both are positive assertions,
@@ -95,7 +95,7 @@ def _input_payload(size_bytes: int) -> dict[str, object]:
 
 @pytest.fixture(scope="session", params=[256, 2048, 8192], ids=["256B", "2KB", "8KB"])
 def sample_input(request: pytest.FixtureRequest) -> dict[str, object]:
-    """Three payload sizes — small, medium, ai-agent-audit's ~8KiB record ceiling."""
+    """Three payload sizes — small, medium, chiplog's ~8KiB record ceiling."""
     return _input_payload(int(request.param))
 
 
@@ -134,7 +134,7 @@ def prepopulated_dir(
 
     payload = _input_payload(2048)
 
-    from agent_audit.schema.v1 import Output, ToolCall
+    from chiplog.schema.v1 import Output, ToolCall
 
     async def populate() -> None:
         for i in range(10_000):

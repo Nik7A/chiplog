@@ -2,6 +2,18 @@
 
 ## 0.2.0 — unreleased
 
+### Renamed to chiplog
+
+The project was `agent-audit`. That name belongs to an unrelated static security analyzer on PyPI, and `ai-agent-audit` — matching the old repo — belongs to a different EU AI Act evidence project. Someone reading this repo and running `pip install ai-agent-audit` would have installed neither of them knowingly.
+
+- Distribution: `agent-audit` → `chiplog`. `pip install chiplog`.
+- Import: `agent_audit` → `chiplog`. Update your imports.
+- CLI: `agent-audit verify` → `chiplog verify`.
+- Environment: `AGENT_AUDIT_DIR`, `AGENT_AUDIT_SIGNING_KEY`, `AGENT_AUDIT_PUBKEY`, `AGENT_AUDIT_CHAIN_ID` → `CHIPLOG_*`.
+- Default audit directory: `~/.config/agent-audit` → `~/.config/chiplog`. **An existing archive is not moved and not read from the new default.** Either `mv ~/.config/agent-audit ~/.config/chiplog`, or point `CHIPLOG_DIR` at the old path. Records themselves are untouched and verify either way — the signing does not depend on where the file sits.
+
+Batched into 0.2.0 rather than shipped separately: 0.2.0 already breaks `record()`, so this is one migration instead of two.
+
 v0.1's core was defective. This release is the correction, and most of it was
 found by running the library against two real agent systems rather than by
 reading the code.

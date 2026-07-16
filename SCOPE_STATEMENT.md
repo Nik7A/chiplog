@@ -1,12 +1,12 @@
-# ai-agent-audit — Scope Statement
+# chiplog — Scope Statement
 
 _v0.1, 2026-06-19. Written BEFORE the code so we don't drift._
 
-This is the contract with anyone who reads the README, opens an issue, or considers using ai-agent-audit for evidence purposes.
+This is the contract with anyone who reads the README, opens an issue, or considers using chiplog for evidence purposes.
 
 ---
 
-## What ai-agent-audit IS
+## What chiplog IS
 
 A Python library that captures **cryptographically-linked records of every tool call** an AI agent makes (LangGraph, MCP — Claude Agent SDK / OpenAI Agents SDK adapters land in v0.2).
 
@@ -14,7 +14,7 @@ Each record contains: tool identity, MCP server info, input args (PII-redacted),
 
 Records are JSON Lines. They're verifiable offline with a CLI that anyone — including an auditor — can run with only the public key.
 
-## What ai-agent-audit IS NOT (and won't claim to be in v0.1)
+## What chiplog IS NOT (and won't claim to be in v0.1)
 
 ### NOT a regulatory-grade evidence system (v0.2 target)
 
@@ -32,7 +32,7 @@ Until those three land, the honest framing is **"cryptographically-linked record
 
 The previous text of this section described the defect that fix closes: 64 calls across 8 threads produced a chain break and 47 sink errors, and those sink errors propagated into the tool-call path and crashed the tools the recorder was supposed to be silently observing. Both halves are addressed — the chain no longer forks, and a sink failure can no longer crash the tool call, on any path.
 
-**The remaining limit is cross-process, and it is real.** The guarantee is per-recorder, in-process. Two `AuditRecorder` instances writing the same `chain_id`, or two processes appending to the same log directory, are still **not** serialised against each other and will still fork the chain. The only cross-process serialisation in the library is the `flock` in the `agent-audit hook-record` subprocess, which covers the Claude Code hook path and nothing else. Do not point two agent processes at one audit directory.
+**The remaining limit is cross-process, and it is real.** The guarantee is per-recorder, in-process. Two `AuditRecorder` instances writing the same `chain_id`, or two processes appending to the same log directory, are still **not** serialised against each other and will still fork the chain. The only cross-process serialisation in the library is the `flock` in the `chiplog hook-record` subprocess, which covers the Claude Code hook path and nothing else. Do not point two agent processes at one audit directory.
 
 ### Silent evidence loss on un-representable values: Fixed
 
@@ -116,7 +116,7 @@ This is not hypothetical: it happened to the author's own dogfood deployment, wh
 
 ### NOT a coverage of these AI controls (any version)
 
-ai-agent-audit covers ONE control area: evidence of what tool calls an AI agent made, with integrity guarantees on that evidence.
+chiplog covers ONE control area: evidence of what tool calls an AI agent made, with integrity guarantees on that evidence.
 
 It does NOT cover, and is not designed to cover:
 
@@ -131,7 +131,7 @@ It does NOT cover, and is not designed to cover:
 9. **Model cards** — model intended use, limitations, evaluation. Documentation artifact.
 10. **Fairness / bias assessment** — protected class outcome analysis. Eval tooling + statistical testing.
 
-If an auditor asks about any of these, the answer is not "we have ai-agent-audit." The answer is the specific tool or process that covers it. ai-agent-audit slots in alongside those — it doesn't replace them.
+If an auditor asks about any of these, the answer is not "we have chiplog." The answer is the specific tool or process that covers it. chiplog slots in alongside those — it doesn't replace them.
 
 ## Where it fits in the compliance stack
 
@@ -145,20 +145,20 @@ For an AI startup selling to regulated B2B buyers:
 ├───────────────────────────────────────────────────┤
 │ Vendor risk + DLP + SSO                            │  ← perimeter & people
 ├───────────────────────────────────────────────────┤
-│ ★ ai-agent-audit                                      │  ← runtime evidence of agent tool calls
+│ ★ chiplog                                      │  ← runtime evidence of agent tool calls
 ├───────────────────────────────────────────────────┤
 │ MCP servers / LangGraph / Claude Agent SDK         │  ← the agents themselves
 └───────────────────────────────────────────────────┘
 ```
 
-ai-agent-audit produces the artifact other layers cite when an auditor asks **"prove what your AI agents actually did."**
+chiplog produces the artifact other layers cite when an auditor asks **"prove what your AI agents actually did."**
 
 ## The honesty test
 
 Before shipping the README, ask:
 
-1. Could a SOC 2 auditor, after reading this README, conclude that ai-agent-audit alone makes a system SOC 2 compliant? **If yes, the README is wrong.**
-2. Could a customer integrate ai-agent-audit and then claim EU AI Act Article 12 compliance? **If yes, the README is wrong.**
-3. Could a customer use ai-agent-audit's logs as primary evidence in an external audit today (v0.1)? **If yes — only if they also have sidecar signer, S3 Object Lock, and external anchor running. v0.1 alone doesn't ship those. Say so.**
+1. Could a SOC 2 auditor, after reading this README, conclude that chiplog alone makes a system SOC 2 compliant? **If yes, the README is wrong.**
+2. Could a customer integrate chiplog and then claim EU AI Act Article 12 compliance? **If yes, the README is wrong.**
+3. Could a customer use chiplog's logs as primary evidence in an external audit today (v0.1)? **If yes — only if they also have sidecar signer, S3 Object Lock, and external anchor running. v0.1 alone doesn't ship those. Say so.**
 
-The right framing is: **"ai-agent-audit provides one component of the evidence pipeline. It is forward-compatible with regulatory-grade evidence; v0.1 is the foundation, v0.2 adds the production hardening."**
+The right framing is: **"chiplog provides one component of the evidence pipeline. It is forward-compatible with regulatory-grade evidence; v0.1 is the foundation, v0.2 adds the production hardening."**

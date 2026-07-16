@@ -19,16 +19,16 @@ from typing import Any
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from agent_audit.adapters.openai_agents import (
+from chiplog.adapters.openai_agents import (
     AuditHooks,
     _extract_output_body,
     _extract_tool_args,
     _extract_tool_name,
 )
-from agent_audit.emit import AuditRecorder
-from agent_audit.integrity import verify_record
-from agent_audit.keys import SigningKey, compute_key_id
-from agent_audit.sinks.base import InMemorySink
+from chiplog.emit import AuditRecorder
+from chiplog.integrity import verify_record
+from chiplog.keys import SigningKey, compute_key_id
+from chiplog.sinks.base import InMemorySink
 
 
 # ---------------------------------------------------------------------------
@@ -240,7 +240,7 @@ async def test_audited_tool_on_openai_callable_records_error(
     recorder: AuditRecorder, sink: InMemorySink
 ) -> None:
     """The decorator sits inside the SDK's failure handling and sees the real exception."""
-    from agent_audit.adapters.langgraph import audited_tool
+    from chiplog.adapters.langgraph import audited_tool
 
     @audited_tool(recorder, session_id="oai")
     async def flaky_search(query: str) -> str:

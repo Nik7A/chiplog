@@ -72,21 +72,21 @@ from typing import Any
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from agent_audit.adapters._claude_hooks import (
+from chiplog.adapters._claude_hooks import (
     is_failure_event,
     is_interrupted,
     is_recordable_event,
     is_unrequested_background,
 )
-from agent_audit.adapters.langgraph import (
+from chiplog.adapters.langgraph import (
     AuditMiddleware,
     _find_runtime_failure,
     _is_control_flow_signal,
     audited_tool,
 )
-from agent_audit.emit import AuditRecorder
-from agent_audit.keys import SigningKey, compute_key_id
-from agent_audit.sinks.base import InMemorySink
+from chiplog.emit import AuditRecorder
+from chiplog.keys import SigningKey, compute_key_id
+from chiplog.sinks.base import InMemorySink
 
 
 @pytest.fixture
@@ -488,7 +488,7 @@ def test_claude_non_completion_events_are_never_recorded(event: str) -> None:
 
 
 async def test_openai_agents_hooks_never_record_success() -> None:
-    from agent_audit.adapters.openai_agents import AuditHooks
+    from chiplog.adapters.openai_agents import AuditHooks
 
     pk = Ed25519PrivateKey.generate()
     pub = pk.public_key()

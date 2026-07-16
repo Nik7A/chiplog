@@ -63,7 +63,7 @@ via `bench/run_hetzner.sh`, which:
 
 ```bash
 brew install hcloud
-hcloud context create ai-agent-audit    # paste API token from Cloud Console
+hcloud context create chiplog    # paste API token from Cloud Console
 hcloud ssh-key create \
     --name "$(whoami)-mac" \
     --public-key-from-file ~/.ssh/id_ed25519.pub

@@ -9,7 +9,7 @@
 #   1. brew install hcloud
 #   2. In Hetzner Cloud Console -> Security -> API Tokens, create a token
 #      with Read & Write scope.
-#   3. hcloud context create ai-agent-audit
+#   3. hcloud context create chiplog
 #         (paste the token when prompted)
 #   4. Upload your SSH public key once:
 #         hcloud ssh-key create \
@@ -60,8 +60,8 @@ require scp
 require rsync
 
 if [ ! -f "$LOCAL_REPO/pyproject.toml" ] \
-   || ! grep -q '^name = "agent-audit"' "$LOCAL_REPO/pyproject.toml"; then
-    echo "ERROR: $LOCAL_REPO does not look like the ai-agent-audit repo."
+   || ! grep -q '^name = "chiplog"' "$LOCAL_REPO/pyproject.toml"; then
+    echo "ERROR: $LOCAL_REPO does not look like the chiplog repo."
     echo "Either cd to the repo root or set LOCAL_REPO=/abs/path."
     exit 1
 fi
@@ -111,7 +111,7 @@ rsync -aH \
     --exclude '.git/' --exclude 'audit/' \
     --exclude 'bench-hetzner.*' --exclude 'bench-m2.*' --exclude 'bench-fingerprint.txt' \
     -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
-    "$LOCAL_REPO/" "root@$IP:/root/ai-agent-audit/"
+    "$LOCAL_REPO/" "root@$IP:/root/chiplog/"
 
 echo "==> Installing deps + running benches on remote (4-6 min)"
 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
@@ -124,7 +124,7 @@ if ! command -v uv >/dev/null 2>&1; then
     curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null
 fi
 export PATH="$HOME/.local/bin:$PATH"
-cd /root/ai-agent-audit
+cd /root/chiplog
 uv sync --group dev
 {
     echo "# Bench run $(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -151,9 +151,9 @@ REMOTE
 echo
 echo "==> Downloading results"
 scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-    "root@$IP:/root/ai-agent-audit/bench-hetzner.txt" \
-    "root@$IP:/root/ai-agent-audit/bench-hetzner.json" \
-    "root@$IP:/root/ai-agent-audit/bench-fingerprint.txt" \
+    "root@$IP:/root/chiplog/bench-hetzner.txt" \
+    "root@$IP:/root/chiplog/bench-hetzner.json" \
+    "root@$IP:/root/chiplog/bench-fingerprint.txt" \
     ./
 
 echo

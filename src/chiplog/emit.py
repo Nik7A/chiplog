@@ -74,7 +74,7 @@ Why not the two obvious primitives — both are wrong here, and both were tried:
 
 What is NOT guaranteed: two `AuditRecorder`s sharing one chain_id, or two
 processes appending to the same log. Cross-process appends are still serialised
-only by the `flock` in the `agent-audit hook-record` subprocess (cli.py), which
+only by the `flock` in the `chiplog hook-record` subprocess (cli.py), which
 covers the Claude Code hook path and nothing else.
 """
 
@@ -93,11 +93,11 @@ from typing import Any
 
 from uuid import uuid7
 
-from agent_audit.integrity import compute_chain_link, sign_record
-from agent_audit.keys import SigningKey
-from agent_audit.normalize import normalize_for_canonical
-from agent_audit.redact import RedactionConfig, redact_tool, redact_value
-from agent_audit.schema.v1 import (
+from chiplog.integrity import compute_chain_link, sign_record
+from chiplog.keys import SigningKey
+from chiplog.normalize import normalize_for_canonical
+from chiplog.redact import RedactionConfig, redact_tool, redact_value
+from chiplog.schema.v1 import (
     Envelope,
     Error,
     Header,
@@ -115,8 +115,8 @@ from agent_audit.schema.v1 import (
     ToolCall,
     UnrepresentableEntry,
 )
-from agent_audit.sinks.base import RedactionStateAware, Sink
-from agent_audit.time import ClockSource, monotonic_ns, now_utc_rfc3339_ns
+from chiplog.sinks.base import RedactionStateAware, Sink
+from chiplog.time import ClockSource, monotonic_ns, now_utc_rfc3339_ns
 
 
 class RecordBuildError(Exception):
@@ -185,7 +185,7 @@ def _poison_chain_head() -> str:
     genuine link. Shaped like a hex SHA-256 so it flows through the schema.
     """
     return hashlib.sha256(
-        b"agent-audit:record-signing-failure:" + os.urandom(16)
+        b"chiplog:record-signing-failure:" + os.urandom(16)
     ).hexdigest()
 
 

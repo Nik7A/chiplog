@@ -27,15 +27,15 @@ from typing import Any
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from agent_audit.emit import AuditRecorder
-from agent_audit.integrity import verify_record
-from agent_audit.keys import SigningKey, compute_key_id
-from agent_audit.redact import (
+from chiplog.emit import AuditRecorder
+from chiplog.integrity import verify_record
+from chiplog.keys import SigningKey, compute_key_id
+from chiplog.redact import (
     RedactionConfig,
     redact_value,
     redaction_authenticity,
 )
-from agent_audit.schema.v1 import (
+from chiplog.schema.v1 import (
     MCPContext,
     MCPTransport,
     NoGateReason,
@@ -44,7 +44,7 @@ from agent_audit.schema.v1 import (
     success,
     ungated,
 )
-from agent_audit.sinks.local_file import LocalFileSink
+from chiplog.sinks.local_file import LocalFileSink
 
 
 # ---------------------------------------------------------------------------

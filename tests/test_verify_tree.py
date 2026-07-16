@@ -29,7 +29,7 @@ from cryptography.hazmat.primitives.serialization import (
     PublicFormat,
 )
 
-from agent_audit.cli import (
+from chiplog.cli import (
     EXIT_CHAIN_BREAK,
     EXIT_MANIFEST_INTEGRITY,
     EXIT_MANIFEST_MISMATCH,
@@ -38,12 +38,12 @@ from agent_audit.cli import (
     EXIT_PARTIAL,
     cli,
 )
-from agent_audit.emit import AuditRecorder
-from agent_audit.integrity import compute_chain_link, sign_record
-from agent_audit.keys import SigningKey, compute_key_id
-from agent_audit.schema.v1 import NoGateReason, Output, ToolCall, success, ungated
-from agent_audit.sinks.local_file import LocalFileSink
-from agent_audit.verify import (
+from chiplog.emit import AuditRecorder
+from chiplog.integrity import compute_chain_link, sign_record
+from chiplog.keys import SigningKey, compute_key_id
+from chiplog.schema.v1 import NoGateReason, Output, ToolCall, success, ungated
+from chiplog.sinks.local_file import LocalFileSink
+from chiplog.verify import (
     ChainCheckOutcome,
     RecordStatus,
     verify_log,
@@ -487,7 +487,7 @@ async def test_front_truncation_real_genesis_guard_single_file(
     assert r.failed_at_offset == 1
     assert "non-null" in (r.failure_detail or "")
     # sanity: the exposed record really is intact under the key
-    from agent_audit.integrity import verify_record
+    from chiplog.integrity import verify_record
 
     exposed = json.loads(lines[1])
     assert verify_record(exposed, {sk.key_id: sk.public_key}).is_valid
@@ -790,12 +790,12 @@ async def test_cli_verify_manifest_count_lie_exit_9(tmp_path: Path) -> None:
 # Real-data proof — copy the real archive read-only, never touch the original
 # ---------------------------------------------------------------------------
 
-_REAL_ARCHIVE = Path.home() / ".config" / "agent-audit"
+_REAL_ARCHIVE = Path.home() / ".config" / "chiplog"
 
 
 @pytest.mark.skipif(
     not (_REAL_ARCHIVE / "manifest.json").is_file(),
-    reason="no real ~/.config/agent-audit archive present",
+    reason="no real ~/.config/chiplog archive present",
 )
 async def test_real_archive_injection_flips_exit(tmp_path: Path) -> None:
     """On a WRITABLE COPY of the real archive (originals never touched): an

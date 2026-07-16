@@ -7,7 +7,7 @@ This script:
      attaches AuditMiddleware
   4. Runs the agent with a fake tool-calling chat model so it executes
      without an external API key
-  5. Reads the resulting JSONL audit log + runs `agent-audit verify`
+  5. Reads the resulting JSONL audit log + runs `chiplog verify`
   6. Prints a one-line summary per record
 
 Run with:  python examples/langgraph_example.py
@@ -33,8 +33,8 @@ from langchain.agents import create_agent
 from langchain_core.messages import AIMessage
 from langchain_core.tools import tool
 
-from agent_audit import AuditRecorder, LocalFileSink, load_signing_key
-from agent_audit.adapters.langgraph import AuditMiddleware
+from chiplog import AuditRecorder, LocalFileSink, load_signing_key
+from chiplog.adapters.langgraph import AuditMiddleware
 
 
 class FakeToolCallingChatModel:
@@ -59,7 +59,7 @@ class FakeToolCallingChatModel:
 
 
 def main() -> int:
-    workspace = Path(tempfile.mkdtemp(prefix="agent-audit-langgraph-"))
+    workspace = Path(tempfile.mkdtemp(prefix="chiplog-langgraph-"))
     print(f"working dir: {workspace}")
 
     # --- 1. dev signing key ----------------------------------------------
@@ -118,7 +118,7 @@ def main() -> int:
     print(f"records:    {sum(1 for line in jsonl.read_text().splitlines() if line)}")
 
     verify = subprocess.run(
-        [sys.executable, "-m", "agent_audit.cli", "verify", str(jsonl), "--pubkey", str(pub)],
+        [sys.executable, "-m", "chiplog.cli", "verify", str(jsonl), "--pubkey", str(pub)],
         capture_output=True,
         text=True,
     )

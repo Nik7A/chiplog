@@ -31,14 +31,14 @@ import pytest
 import rfc8785
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from agent_audit.adapters.claude_agent_sdk import AuditHook
-from agent_audit.adapters.langgraph import AuditMiddleware, audited_tool
-from agent_audit.adapters.openai_agents import AuditHooks
-from agent_audit.emit import AuditRecorder
-from agent_audit.integrity import verify_record
-from agent_audit.keys import SigningKey, compute_key_id
-from agent_audit.schema.v1 import UnrepresentableReason
-from agent_audit.sinks.base import InMemorySink
+from chiplog.adapters.claude_agent_sdk import AuditHook
+from chiplog.adapters.langgraph import AuditMiddleware, audited_tool
+from chiplog.adapters.openai_agents import AuditHooks
+from chiplog.emit import AuditRecorder
+from chiplog.integrity import verify_record
+from chiplog.keys import SigningKey, compute_key_id
+from chiplog.schema.v1 import UnrepresentableReason
+from chiplog.sinks.base import InMemorySink
 
 # A secret that, if laundered by `default=str`, would appear verbatim in the
 # signed canonical bytes. The not-laundered assertion greps for it.

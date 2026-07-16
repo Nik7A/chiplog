@@ -1,7 +1,7 @@
 """Wire redaction_authenticity() into the verifier.
 
 Before this fix a tool-supplied look-alike marker was signed into a validly-
-signed record and `agent-audit verify` returned PASS over it, because the
+signed record and `chiplog verify` returned PASS over it, because the
 verifier never called `redaction_authenticity()`. A forged/unbacked marker must
 now surface as a finding with a non-zero exit, WITHOUT weakening any existing
 verdict (a genuine record still passes).
@@ -17,12 +17,12 @@ from click.testing import CliRunner
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
-from agent_audit.cli import cli
-from agent_audit.emit import AuditRecorder
-from agent_audit.keys import SigningKey, compute_key_id
-from agent_audit.schema.v1 import NoGateReason, Output, ToolCall, success, ungated
-from agent_audit.sinks.local_file import LocalFileSink
-from agent_audit.verify import ChainCheckOutcome, verify_log
+from chiplog.cli import cli
+from chiplog.emit import AuditRecorder
+from chiplog.keys import SigningKey, compute_key_id
+from chiplog.schema.v1 import NoGateReason, Output, ToolCall, success, ungated
+from chiplog.sinks.local_file import LocalFileSink
+from chiplog.verify import ChainCheckOutcome, verify_log
 
 
 @pytest.fixture

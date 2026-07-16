@@ -1,6 +1,6 @@
 # Contributing
 
-`ai-agent-audit` is a small project run by one maintainer. PRs and issues are welcome; please read this first.
+`chiplog` is a small project run by one maintainer. PRs and issues are welcome; please read this first.
 
 ## Signed commits
 
@@ -32,4 +32,4 @@ Adapter requests should include the runtime name, your expected record volume, a
 
 ## Contact
 
-Maintainer: Nikolai Semernia. Open an issue at `github.com/Nik7A/ai-agent-audit`.
+Maintainer: Nikolai Semernia. Open an issue at `github.com/Nik7A/chiplog`.

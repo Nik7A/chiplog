@@ -31,16 +31,16 @@ from cryptography.hazmat.primitives.serialization import PublicFormat
 from langchain_core.tools import InjectedToolCallId
 from langgraph.types import Command
 
-from agent_audit.adapters.langgraph import (
+from chiplog.adapters.langgraph import (
     AuditMiddleware,
     _extract_output_body,
     _extract_tool_info,
     audited_tool,
 )
-from agent_audit.emit import AuditRecorder
-from agent_audit.integrity import verify_record
-from agent_audit.keys import SigningKey, compute_key_id
-from agent_audit.sinks.base import InMemorySink
+from chiplog.emit import AuditRecorder
+from chiplog.integrity import verify_record
+from chiplog.keys import SigningKey, compute_key_id
+from chiplog.sinks.base import InMemorySink
 
 
 @pytest.fixture
@@ -137,7 +137,7 @@ async def test_audited_tool_async_records_and_returns(
 def test_audited_tool_chain_advances_across_calls(
     recorder: AuditRecorder, sink: InMemorySink
 ) -> None:
-    from agent_audit.integrity import compute_chain_link
+    from chiplog.integrity import compute_chain_link
 
     @audited_tool(recorder)
     def noop() -> int:
@@ -460,7 +460,7 @@ def test_non_json_value_becomes_announced_marker(
     str()-laundered value, and never a dropped record. The adapter no longer
     pre-launders; `normalize_for_canonical` in the recorder does the honest work.
     """
-    from agent_audit.normalize import MARKER_KEY
+    from chiplog.normalize import MARKER_KEY
 
     class Weird:
         def __str__(self) -> str:
@@ -524,9 +524,9 @@ def test_real_create_agent_with_audit_middleware_records_tool_call(
     from langchain_core.tools import tool
     from click.testing import CliRunner
 
-    from agent_audit.cli import EXIT_OK, cli
-    from agent_audit.keys import load_signing_key
-    from agent_audit.sinks.local_file import LocalFileSink
+    from chiplog.cli import EXIT_OK, cli
+    from chiplog.keys import load_signing_key
+    from chiplog.sinks.local_file import LocalFileSink
 
     pk = Ed25519PrivateKey.generate()
     priv = tmp_path / "signing.key"
@@ -613,9 +613,9 @@ def test_real_create_agent_records_error_for_runtime_handled_tool_failure(
     from langchain_core.tools import tool
     from click.testing import CliRunner
 
-    from agent_audit.cli import EXIT_OK, cli
-    from agent_audit.keys import load_signing_key
-    from agent_audit.sinks.local_file import LocalFileSink
+    from chiplog.cli import EXIT_OK, cli
+    from chiplog.keys import load_signing_key
+    from chiplog.sinks.local_file import LocalFileSink
 
     pk = Ed25519PrivateKey.generate()
     priv = tmp_path / "signing.key"
@@ -1073,12 +1073,12 @@ def test_middleware_wrap_cancellation_recorder_failure_does_not_mask(
 
 
 def test_audited_tool_is_exported_from_package_root() -> None:
-    import agent_audit
-    from agent_audit import audited_tool as root_audited_tool
-    from agent_audit.adapters.langgraph import audited_tool as adapter_audited_tool
+    import chiplog
+    from chiplog import audited_tool as root_audited_tool
+    from chiplog.adapters.langgraph import audited_tool as adapter_audited_tool
 
     assert root_audited_tool is adapter_audited_tool
-    assert "audited_tool" in agent_audit.__all__
+    assert "audited_tool" in chiplog.__all__
 
 
 # ---------------------------------------------------------------------------
@@ -1090,9 +1090,9 @@ def test_audited_tool_is_exported_from_package_root() -> None:
 # `GraphBubbleUp` lazily inside the function rather than at module scope. Both
 # choices are justified ENTIRELY by one promise: `@audited_tool` — re-exported
 # from the package root — must keep working with langchain and langgraph absent.
-# `agent_audit/__init__.py` imports `adapters.langgraph`, so a single unguarded
+# `chiplog/__init__.py` imports `adapters.langgraph`, so a single unguarded
 # module-scope `from langchain_core.messages import ToolMessage` would break
-# `import agent_audit` for every user who never installed LangChain.
+# `import chiplog` for every user who never installed LangChain.
 #
 # Without this test nothing in CI defends that promise, and the next person to
 # reach for `isinstance` ships green. The subprocess below installs a meta-path
@@ -1130,14 +1130,14 @@ else:
 
 # The load-bearing line: a module-scope LangChain import anywhere reachable
 # from the package root raises HERE.
-import agent_audit
-from agent_audit import AuditRecorder, audited_tool
-from agent_audit.adapters.langgraph import AuditMiddleware
-from agent_audit.keys import SigningKey, compute_key_id
-from agent_audit.sinks.base import InMemorySink
+import chiplog
+from chiplog import AuditRecorder, audited_tool
+from chiplog.adapters.langgraph import AuditMiddleware
+from chiplog.keys import SigningKey, compute_key_id
+from chiplog.sinks.base import InMemorySink
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-assert "audited_tool" in agent_audit.__all__
+assert "audited_tool" in chiplog.__all__
 
 _pk = Ed25519PrivateKey.generate()
 _pub = _pk.public_key()
@@ -1200,7 +1200,7 @@ def test_package_works_with_langchain_and_langgraph_absent() -> None:
         timeout=120,
     )
     assert proc.returncode == 0, (
-        "agent_audit must import and audit with langchain/langgraph absent — a "
+        "chiplog must import and audit with langchain/langgraph absent — a "
         "module-scope LangChain import in an adapter breaks every user who never "
         f"installed it.\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
     )
@@ -1455,9 +1455,9 @@ def test_real_create_agent_records_error_for_failure_nested_in_command(
     from langchain_core.messages import AIMessage, ToolMessage
     from langchain_core.tools import tool
 
-    from agent_audit.cli import EXIT_OK, cli
-    from agent_audit.keys import load_signing_key
-    from agent_audit.sinks.local_file import LocalFileSink
+    from chiplog.cli import EXIT_OK, cli
+    from chiplog.keys import load_signing_key
+    from chiplog.sinks.local_file import LocalFileSink
 
     priv, pub = _e2e_keys(tmp_path)
     sink = LocalFileSink(dir=tmp_path / "audit", pubkey_pem=pub.read_bytes())
@@ -1541,9 +1541,9 @@ async def test_real_create_agent_records_error_for_list_return_async(
     from langchain_core.messages import AIMessage, ToolMessage
     from langchain_core.tools import tool
 
-    from agent_audit.cli import EXIT_OK, cli
-    from agent_audit.keys import load_signing_key
-    from agent_audit.sinks.local_file import LocalFileSink
+    from chiplog.cli import EXIT_OK, cli
+    from chiplog.keys import load_signing_key
+    from chiplog.sinks.local_file import LocalFileSink
 
     priv, pub = _e2e_keys(tmp_path)
     sink = LocalFileSink(dir=tmp_path / "audit", pubkey_pem=pub.read_bytes())
@@ -1641,7 +1641,7 @@ class _FakeHttpResponse:
 
 def test_find_runtime_failure_ignores_status_on_a_non_toolmessage() -> None:
     """The predicate must not fire on any object that merely has `.status`."""
-    from agent_audit.adapters.langgraph import _find_runtime_failure
+    from chiplog.adapters.langgraph import _find_runtime_failure
 
     assert _find_runtime_failure(_FakeHttpResponse(status="error")) is None, (
         "an arbitrary object with .status == 'error' was read as a runtime "

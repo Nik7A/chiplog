@@ -26,7 +26,7 @@ Shipped:
 
 Adapters:
 
-- Claude Code CLI (`agent-audit hook-record` under both `PostToolUse` and `PostToolUseFailure`)
+- Claude Code CLI (`chiplog hook-record` under both `PostToolUse` and `PostToolUseFailure`)
 - LangChain / LangGraph 1.x (`AuditMiddleware` plus `@audited_tool` decorator on any callable)
 - OpenAI Agents SDK (`@audited_tool` on the tool callable; `AuditHooks(RunHooks)` passed to `Runner.run` records `unobserved`) — shipped in v0.1.1
 - Claude Agent SDK Python (`AuditHook` registered under both `PostToolUse` and `PostToolUseFailure` in `ClaudeAgentOptions.hooks`) — shipped in v0.1.2
@@ -94,6 +94,6 @@ Plausible, not committed:
 
 One design-partner slot is open for v0.2. Terms: scoped per partner, weighted toward co-development rather than a vendor relationship. Your production failure modes set the v0.2 hardening priorities; your name stays off the page unless you opt in. Reach out — cadence and commercial terms get figured out together. Fit: a Python AI team in a regulated domain with a SOC 2 Type II or ISO 27001 program active or being scoped.
 
-For everyone else: open an issue at `github.com/Nik7A/ai-agent-audit`. Adapter requests should include the runtime, your record volume, and the obligation driving the ask.
+For everyone else: open an issue at `github.com/Nik7A/chiplog`. Adapter requests should include the runtime, your record volume, and the obligation driving the ask.
 
 Contact: [Nikolai Semernia on LinkedIn](https://www.linkedin.com/in/nikolai-semernia).

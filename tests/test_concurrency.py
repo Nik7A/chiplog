@@ -53,21 +53,21 @@ from cryptography.hazmat.primitives.serialization import (
     PublicFormat,
 )
 
-from agent_audit.adapters.langgraph import AuditMiddleware
-from agent_audit.emit import AuditRecorder
-from agent_audit.integrity import compute_chain_link
-from agent_audit.keys import SigningKey, compute_key_id, load_public_key
-from agent_audit.manifest import Manifest
-from agent_audit.schema.v1 import (
+from chiplog.adapters.langgraph import AuditMiddleware
+from chiplog.emit import AuditRecorder
+from chiplog.integrity import compute_chain_link
+from chiplog.keys import SigningKey, compute_key_id, load_public_key
+from chiplog.manifest import Manifest
+from chiplog.schema.v1 import (
     NoGateReason,
     Output,
     ToolCall,
     success,
     ungated,
 )
-from agent_audit.sinks.base import InMemorySink, Sink, SinkError
-from agent_audit.sinks.local_file import LocalFileSink
-from agent_audit.verify import ChainCheckOutcome, verify_log
+from chiplog.sinks.base import InMemorySink, Sink, SinkError
+from chiplog.sinks.local_file import LocalFileSink
+from chiplog.verify import ChainCheckOutcome, verify_log
 
 # ---------------------------------------------------------------------------
 # Shared harness

@@ -21,7 +21,7 @@ import math
 
 import rfc8785
 
-from agent_audit.normalize import (
+from chiplog.normalize import (
     MARKER_KEY,
     MARKER_TAG,
     UnrepresentableReason,

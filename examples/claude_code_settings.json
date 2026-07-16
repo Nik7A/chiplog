@@ -1,6 +1,6 @@
 {
-  "_comment_1": "Drop this hooks block into ~/.claude/settings.json (or ~/.claude-<scope>/settings.json for a scoped Claude Code install). Every tool call from `claude`, `claude --bg`, and Claude Code subagents writes a signed record to ~/.config/agent-audit/audit-YYYY-MM-DD.jsonl. Verify offline with `agent-audit verify <log> --pubkey ~/.config/agent-audit/signing.pub`.",
-  "_comment_2": "The command path here assumes agent-audit is on PATH (pipx / uv tool install / activated venv). If it isn't, replace with one of: (a) `python -m agent_audit.cli hook-record` — works whenever Python can import agent_audit; (b) full path like `/path/to/.venv/bin/agent-audit hook-record` — always works regardless of shell setup. Add `--chain-id <name>` to keep all records under one linked chain (recommended for daemons that span many sessions).",
+  "_comment_1": "Drop this hooks block into ~/.claude/settings.json (or ~/.claude-<scope>/settings.json for a scoped Claude Code install). Every tool call from `claude`, `claude --bg`, and Claude Code subagents writes a signed record to ~/.config/chiplog/audit-YYYY-MM-DD.jsonl. Verify offline with `chiplog verify <log> --pubkey ~/.config/chiplog/signing.pub`.",
+  "_comment_2": "The command path here assumes chiplog is on PATH (pipx / uv tool install / activated venv). If it isn't, replace with one of: (a) `python -m chiplog.cli hook-record` — works whenever Python can import chiplog; (b) full path like `/path/to/.venv/bin/chiplog hook-record` — always works regardless of shell setup. Add `--chain-id <name>` to keep all records under one linked chain (recommended for daemons that span many sessions).",
   "hooks": {
     "PostToolUse": [
       {
@@ -8,7 +8,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agent-audit hook-record"
+            "command": "chiplog hook-record"
           }
         ]
       }

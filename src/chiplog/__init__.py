@@ -1,14 +1,14 @@
-"""agent-audit — Cryptographically-linked records of AI agent tool calls.
+"""chiplog — Cryptographically-linked records of AI agent tool calls.
 
 See SCOPE_STATEMENT.md before staking a compliance claim on v0.1.
 """
 
-from agent_audit.adapters.langgraph import audited_tool
-from agent_audit.emit import AuditRecorder, RecordBuildError, RecordSigningError
-from agent_audit.keys import SigningKey, load_public_key, load_signing_key
-from agent_audit.manifest import ChainState, FileChecksum, Manifest
-from agent_audit.redact import DEFAULT_RULES, RedactionConfig, RedactionRule
-from agent_audit.schema.v1 import (
+from chiplog.adapters.langgraph import audited_tool
+from chiplog.emit import AuditRecorder, RecordBuildError, RecordSigningError
+from chiplog.keys import SigningKey, load_public_key, load_signing_key
+from chiplog.manifest import ChainState, FileChecksum, Manifest
+from chiplog.redact import DEFAULT_RULES, RedactionConfig, RedactionRule
+from chiplog.schema.v1 import (
     Gate,
     GateDecision,
     LifecycleEventPayload,
@@ -29,13 +29,13 @@ from agent_audit.schema.v1 import (
     route_transition,
     ungated,
 )
-from agent_audit.sinks.base import (
+from chiplog.sinks.base import (
     DiskFullError,
     InMemorySink,
     Sink,
     SinkError,
 )
-from agent_audit.sinks.local_file import LocalFileSink
+from chiplog.sinks.local_file import LocalFileSink
 
 __version__ = "0.1.2"
 

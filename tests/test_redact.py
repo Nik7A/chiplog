@@ -12,7 +12,7 @@ import hashlib
 import re
 from typing import Any
 
-from agent_audit.redact import (
+from chiplog.redact import (
     DEFAULT_RULES,
     RedactionConfig,
     RedactionRule,

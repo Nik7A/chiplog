@@ -18,11 +18,11 @@ import json
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from agent_audit.emit import AuditRecorder
-from agent_audit.integrity import compute_chain_link, verify_record
-from agent_audit.keys import SigningKey, compute_key_id
-from agent_audit.redact import RedactionConfig
-from agent_audit.schema.v1 import (
+from chiplog.emit import AuditRecorder
+from chiplog.integrity import compute_chain_link, verify_record
+from chiplog.keys import SigningKey, compute_key_id
+from chiplog.redact import RedactionConfig
+from chiplog.schema.v1 import (
     GateDecision,
     NoGateReason,
     Output,
@@ -33,7 +33,7 @@ from agent_audit.schema.v1 import (
     timeout,
     ungated,
 )
-from agent_audit.sinks.base import InMemorySink, SinkError
+from chiplog.sinks.base import InMemorySink, SinkError
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 [project]
-name = "agent-audit"
+name = "chiplog"
 version = "0.2.0"
 description = "Cryptographically-linked records of AI agent tool calls. Forward-compatible foundation for SOC 2 / ISO 42001 / EU AI Act Article 12 evidence."
 authors = [
@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
-agent-audit = "agent_audit.cli:main"
+chiplog = "chiplog.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.11.7,<0.12.0"]

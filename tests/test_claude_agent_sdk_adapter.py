@@ -17,15 +17,15 @@ from typing import Any
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from agent_audit.adapters.claude_agent_sdk import (
+from chiplog.adapters.claude_agent_sdk import (
     AuditHook,
     _extract_session_id,
     _extract_step_id,
 )
-from agent_audit.emit import AuditRecorder
-from agent_audit.integrity import compute_chain_link, verify_record
-from agent_audit.keys import SigningKey, compute_key_id
-from agent_audit.sinks.base import InMemorySink
+from chiplog.emit import AuditRecorder
+from chiplog.integrity import compute_chain_link, verify_record
+from chiplog.keys import SigningKey, compute_key_id
+from chiplog.sinks.base import InMemorySink
 
 
 # ---------------------------------------------------------------------------
@@ -295,7 +295,7 @@ async def test_user_denial_records_denied_with_gate(
 ) -> None:
     """A user denial → outcome=denied + Gate(DENY) with matching policy_id and
     output.body=None. Not error(Interrupt). Signs and verifies."""
-    from agent_audit.adapters._claude_hooks import PERMISSION_DENIED_POLICY_ID
+    from chiplog.adapters._claude_hooks import PERMISSION_DENIED_POLICY_ID
 
     hook = AuditHook(recorder=recorder, session_id="cas")
     await hook(

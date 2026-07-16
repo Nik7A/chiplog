@@ -50,8 +50,8 @@ from typing import Any, Callable, TypeVar
 
 from uuid import uuid7
 
-from agent_audit.emit import AuditRecorder
-from agent_audit.schema.v1 import (
+from chiplog.emit import AuditRecorder
+from chiplog.schema.v1 import (
     PolicyUnobservedReason,
     Output,
     ToolCall,
@@ -719,8 +719,8 @@ class AuditMiddleware(_AgentMiddleware):
 
     Usage:
         from langchain.agents import create_agent
-        from agent_audit import AuditRecorder, LocalFileSink, load_signing_key
-        from agent_audit.adapters.langgraph import AuditMiddleware
+        from chiplog import AuditRecorder, LocalFileSink, load_signing_key
+        from chiplog.adapters.langgraph import AuditMiddleware
 
         recorder = AuditRecorder(
             sink=LocalFileSink(dir="./audit"),

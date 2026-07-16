@@ -1,4 +1,4 @@
-# ai-agent-audit
+# chiplog
 
 *Your AI agent acts on its own. Now you can prove what it did.*
 
@@ -14,15 +14,15 @@ A small Python library that captures every tool call your AI agent makes, signs 
 
 Four instrumentation paths ship today:
 
-1. **Claude Code hooks** — register `agent-audit hook-record` under **both** `PostToolUse` and `PostToolUseFailure` in `~/.claude/settings.json`. Captures every tool call from `claude` / `claude --bg` / Claude Code subagent dispatches, including all MCP server calls (Asana, mem0, Notion, anything you've wired in).
+1. **Claude Code hooks** — register `chiplog hook-record` under **both** `PostToolUse` and `PostToolUseFailure` in `~/.claude/settings.json`. Captures every tool call from `claude` / `claude --bg` / Claude Code subagent dispatches, including all MCP server calls (Asana, mem0, Notion, anything you've wired in).
 2. **LangGraph adapter** — `AuditMiddleware(AgentMiddleware)` plugged into `create_agent`, or `@audited_tool` on the tool callable for raw `StateGraph` users who don't go through `create_agent`.
-3. **OpenAI Agents SDK adapter** — `@audited_tool` (from `agent_audit`) on the tool callable is the audit-grade path. `AuditHooks(RunHooks)` passed to `Runner.run(..., hooks=...)` also records every local tool call the SDK dispatches, but cannot see outcomes — see [What each adapter can see](#what-each-adapter-can-see).
+3. **OpenAI Agents SDK adapter** — `@audited_tool` (from `chiplog`) on the tool callable is the audit-grade path. `AuditHooks(RunHooks)` passed to `Runner.run(..., hooks=...)` also records every local tool call the SDK dispatches, but cannot see outcomes — see [What each adapter can see](#what-each-adapter-can-see).
 4. **Claude Agent SDK adapter** — `AuditHook` registered under **both** `PostToolUse` and `PostToolUseFailure` in `ClaudeAgentOptions.hooks`. The SDK supplies `session_id` and `tool_use_id` natively.
 
 The `@audited_tool` decorator works on any Python callable — custom agents, direct SDK loops, anything — and is imported from the package root:
 
 ```python
-from agent_audit import audited_tool
+from chiplog import audited_tool
 ```
 
 The signing spec lives in [SIGNING.md](SIGNING.md) with one worked test vector so a third-party verifier can be built in any language.
@@ -30,9 +30,9 @@ The signing spec lives in [SIGNING.md](SIGNING.md) with one worked test vector s
 ## What this isn't
 
 - **Not an observability product.** If you want span-level tracing, eval harnesses, or token cost graphs, use LangSmith, Langfuse, or Datadog Agent Observability. Those produce dashboards. This produces records.
-- **Not a GRC platform.** Vanta, Drata, and friends map controls to frameworks. ai-agent-audit produces an artifact those controls can cite. They live upstream of this.
+- **Not a GRC platform.** Vanta, Drata, and friends map controls to frameworks. chiplog produces an artifact those controls can cite. They live upstream of this.
 - **Not a SOC 2 magic button.** Your auditor still decides what's acceptable. v0.1 makes the conversation easier; v0.2 is what survives it.
-- **Not a coverage of:** model provenance, training data lineage, eval evidence, prompt change management, vendor risk, IR runbooks, DPIA, HITL SOPs, model cards, fairness. See [SCOPE_STATEMENT.md](SCOPE_STATEMENT.md). ai-agent-audit covers one control area.
+- **Not a coverage of:** model provenance, training data lineage, eval evidence, prompt change management, vendor risk, IR runbooks, DPIA, HITL SOPs, model cards, fairness. See [SCOPE_STATEMENT.md](SCOPE_STATEMENT.md). chiplog covers one control area.
 
 ## v0.1 — what's honest about it
 
@@ -77,10 +77,10 @@ What v0.1 alone does NOT prove (NON-CLAIMS, repeated in every verify report):
 
 | Runtime | Status | Integration |
 | --- | --- | --- |
-| Any Python callable (custom agents, direct Anthropic / OpenAI SDK loops, in-house frameworks) | Supported | `@audited_tool` decorator (`from agent_audit import audited_tool`) |
-| Claude Code CLI | Supported | `agent-audit hook-record` under **both** `PostToolUse` and `PostToolUseFailure` |
+| Any Python callable (custom agents, direct Anthropic / OpenAI SDK loops, in-house frameworks) | Supported | `@audited_tool` decorator (`from chiplog import audited_tool`) |
+| Claude Code CLI | Supported | `chiplog hook-record` under **both** `PostToolUse` and `PostToolUseFailure` |
 | LangChain / LangGraph (1.x) | Supported | `AuditMiddleware` plus `@audited_tool` decorator |
-| OpenAI Agents SDK | Supported | `@audited_tool` decorator (the audit-grade path, `from agent_audit import audited_tool`); `AuditHooks(RunHooks)` records `unobserved` only |
+| OpenAI Agents SDK | Supported | `@audited_tool` decorator (the audit-grade path, `from chiplog import audited_tool`); `AuditHooks(RunHooks)` records `unobserved` only |
 | CrewAI | Stub planned for v0.2 | Crew/Task event hooks via `@audited_tool` on tools |
 | LlamaIndex (Workflows + Agents) | Stub planned for v0.2 | Workflow step events and `@audited_tool` on tools |
 | Claude Agent SDK (Python) | Supported | `AuditHook` under **both** `PostToolUse` and `PostToolUseFailure` in `ClaudeAgentOptions.hooks` |
@@ -142,13 +142,13 @@ Lifecycle events (`Stop`, `SubagentStop`) are not recorded; only tool calls are.
 Generate a signing key once:
 
 ```bash
-mkdir -p ~/.config/agent-audit
+mkdir -p ~/.config/chiplog
 python -c "from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey; \
 from cryptography.hazmat.primitives.serialization import Encoding, PrivateFormat, PublicFormat, NoEncryption; \
 k=Ed25519PrivateKey.generate(); \
-open('$HOME/.config/agent-audit/signing.key','wb').write(k.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption())); \
-open('$HOME/.config/agent-audit/signing.pub','wb').write(k.public_key().public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo))"
-chmod 0600 ~/.config/agent-audit/signing.key
+open('$HOME/.config/chiplog/signing.key','wb').write(k.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption())); \
+open('$HOME/.config/chiplog/signing.pub','wb').write(k.public_key().public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo))"
+chmod 0600 ~/.config/chiplog/signing.key
 ```
 
 Register the hook in `~/.claude/settings.json` under **both** events:
@@ -160,7 +160,7 @@ Register the hook in `~/.claude/settings.json` under **both** events:
       {
         "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "agent-audit hook-record" }
+          { "type": "command", "command": "chiplog hook-record" }
         ]
       }
     ],
@@ -168,7 +168,7 @@ Register the hook in `~/.claude/settings.json` under **both** events:
       {
         "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "agent-audit hook-record" }
+          { "type": "command", "command": "chiplog hook-record" }
         ]
       }
     ]
@@ -178,17 +178,17 @@ Register the hook in `~/.claude/settings.json` under **both** events:
 
 **Register both, or you get zero failure coverage.** The two events are disjoint: a successful call fires only `PostToolUse`, a failed call fires only `PostToolUseFailure` (verified against Claude Code CLI 2.1.207). A `PostToolUse`-only install signs every success and drops every failure on the floor — and it looks like it is working, because the records that do arrive are valid. That is the exact failure mode this library exists to prevent. The same applies to the Claude Agent SDK adapter: register `AuditHook` under both events in `ClaudeAgentOptions.hooks`.
 
-That's it. Every tool call from `claude`, `claude --bg`, and any spawned Claude Code subagents now produces a signed, chained record in `~/.config/agent-audit/audit-YYYY-MM-DD.jsonl`.
+That's it. Every tool call from `claude`, `claude --bg`, and any spawned Claude Code subagents now produces a signed, chained record in `~/.config/chiplog/audit-YYYY-MM-DD.jsonl`.
 
 Offline verification — anyone with the public key can run:
 
 ```bash
 # single file (unchanged): one file, one key
-agent-audit verify ~/.config/agent-audit/audit-2026-06-19.jsonl \
-  --pubkey ~/.config/agent-audit/signing.pub
+chiplog verify ~/.config/chiplog/audit-2026-06-19.jsonl \
+  --pubkey ~/.config/chiplog/signing.pub
 
 # whole directory: multi-file chains, rotated keys, manifest cross-check
-agent-audit verify ~/.config/agent-audit/
+chiplog verify ~/.config/chiplog/
 ```
 
 Directory mode walks a logical chain across daily files, resolves rotated
@@ -211,14 +211,14 @@ appendix. Full contract and precedence: `SIGNING.md` §7.5.
 
 ```python
 from langchain.agents import create_agent
-from agent_audit import AuditRecorder
-from agent_audit.adapters.langgraph import AuditMiddleware
-from agent_audit.sinks.local_file import LocalFileSink
-from agent_audit.keys import load_signing_key
+from chiplog import AuditRecorder
+from chiplog.adapters.langgraph import AuditMiddleware
+from chiplog.sinks.local_file import LocalFileSink
+from chiplog.keys import load_signing_key
 
 recorder = AuditRecorder(
     sink=LocalFileSink(dir="./audit"),
-    signing_key=load_signing_key("~/.config/agent-audit/signing.key"),
+    signing_key=load_signing_key("~/.config/chiplog/signing.key"),
 )
 
 agent = create_agent(
@@ -232,7 +232,7 @@ agent = create_agent(
 For raw `StateGraph` (without `create_agent`), there is no middleware seam to plug into — decorate the tool callables themselves:
 
 ```python
-from agent_audit import audited_tool
+from chiplog import audited_tool
 
 @audited_tool(recorder, session_id="demo")
 def lookup_customer(customer_id: str) -> dict:
@@ -247,11 +247,11 @@ def lookup_customer(customer_id: str) -> dict:
 
 ```python
 from agents import Agent, function_tool
-from agent_audit import AuditRecorder, LocalFileSink, audited_tool, load_signing_key
+from chiplog import AuditRecorder, LocalFileSink, audited_tool, load_signing_key
 
 recorder = AuditRecorder(
     sink=LocalFileSink(dir="./audit"),
-    signing_key=load_signing_key("~/.config/agent-audit/signing.key"),
+    signing_key=load_signing_key("~/.config/chiplog/signing.key"),
 )
 
 @function_tool
@@ -274,9 +274,15 @@ One recorder with `LocalFileSink` is bound by per-record `fsync`, in the low hun
 
 - **A recorder does not scale with concurrency.** v0.2 serialises the whole commit section per recorder so the chain cannot fork, which makes one recorder one writer: 8 concurrent tool calls sustain the same rate as 1. Scale by running more recorders (one per chain), not more callers.
 - **v0.2 costs 21–45 % more CPU per record than v0.1** (payload-dependent), from the normalize + redact-every-scalar passes. On an `fsync`-bound sink this is mostly invisible; on a sink that is not `fsync`-bound, it is the cost.
-- **Verification is the auditor's wall clock.** `agent-audit verify <dir>` runs a manifest cross-check, a full sha256 pass per file, and every signature. A ~6-month, 10 M-record chain takes on the order of an hour single-process; parallelise by `chain_id`.
+- **Verification is the auditor's wall clock.** `chiplog verify <dir>` runs a manifest cross-check, a full sha256 pass per file, and every signature. A ~6-month, 10 M-record chain takes on the order of an hour single-process; parallelise by `chain_id`.
 
 Exact figures, both machines, run-to-run spread, and the v0.1→v0.2 delta — including where v0.2 regressed — are in [BENCHMARKS.md](BENCHMARKS.md). Numbers there are labelled by the machine they were measured on; no figure is claimed for hardware it was not run on.
+
+## Why the name
+
+A chip log is a wooden board on a knotted line, thrown off a ship's stern to measure speed. The word `log` — the ship's log, and every log file since — comes from it. It is the oldest instrument for writing down what actually happened, and it works by recording each interval as it passes rather than reconstructing the voyage afterwards.
+
+(Previously `agent-audit` on PyPI, which belongs to an unrelated project. `pip install agent-audit` gets you a static security analyzer, not this.)
 
 ## Why this exists
 

@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict
 
-from agent_audit.verify import (
+from chiplog.verify import (
     LogVerificationResult,
     TreeVerificationResult,
 )
@@ -44,7 +44,7 @@ def format_text_report(result: LogVerificationResult) -> str:
     lines: list[str] = []
     sep = "=" * _REPORT_WIDTH
 
-    lines.append("agent-audit verification report")
+    lines.append("chiplog verification report")
     lines.append(sep)
     lines.append("")
     lines.append(f"path:           {result.path}")
@@ -141,7 +141,7 @@ def format_tree_text_report(result: TreeVerificationResult) -> str:
     lines: list[str] = []
     sep = "=" * _REPORT_WIDTH
 
-    lines.append("agent-audit directory verification report")
+    lines.append("chiplog directory verification report")
     lines.append(sep)
     lines.append("")
     lines.append(f"root:               {result.root}")

@@ -10,7 +10,7 @@ This script:
   4. Drives AuditHooks directly through its lifecycle with two synthetic
      tool-call invocations, mirroring what the SDK would feed it during
      a real run
-  5. Reads the resulting JSONL audit log + runs `agent-audit verify`
+  5. Reads the resulting JSONL audit log + runs `chiplog verify`
   6. Prints a one-line summary per record
 
 Run with:  python examples/openai_agents_example.py
@@ -34,8 +34,8 @@ from cryptography.hazmat.primitives.serialization import (
     PublicFormat,
 )
 
-from agent_audit import AuditRecorder, LocalFileSink, load_signing_key
-from agent_audit.adapters.openai_agents import AuditHooks
+from chiplog import AuditRecorder, LocalFileSink, load_signing_key
+from chiplog.adapters.openai_agents import AuditHooks
 
 
 # ---------------------------------------------------------------------------
@@ -152,7 +152,7 @@ def main() -> None:
         pubkey_path = signing_key_path.with_suffix(".pub")
         verify = subprocess.run(
             [
-                "agent-audit",
+                "chiplog",
                 "verify",
                 str(jsonl_path),
                 "--pubkey",

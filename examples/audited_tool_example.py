@@ -8,7 +8,7 @@ This script:
   2. Builds an AuditRecorder backed by a LocalFileSink
   3. Defines two normal Python functions decorated with @audited_tool
   4. Calls them like ordinary code
-  5. Reads the resulting JSONL audit log + runs `agent-audit verify`
+  5. Reads the resulting JSONL audit log + runs `chiplog verify`
   6. Prints a one-line summary per record
 
 Run with:  python examples/audited_tool_example.py
@@ -35,11 +35,11 @@ from cryptography.hazmat.primitives.serialization import (
     PublicFormat,
 )
 
-from agent_audit import AuditRecorder, LocalFileSink, audited_tool, load_signing_key
+from chiplog import AuditRecorder, LocalFileSink, audited_tool, load_signing_key
 
 
 def main() -> int:
-    workspace = Path(tempfile.mkdtemp(prefix="agent-audit-tool-"))
+    workspace = Path(tempfile.mkdtemp(prefix="chiplog-tool-"))
     print(f"working dir: {workspace}")
 
     # --- 1. dev signing key ----------------------------------------------
@@ -89,7 +89,7 @@ def main() -> int:
     print(f"records:    {sum(1 for line in jsonl.read_text().splitlines() if line)}")
 
     verify = subprocess.run(
-        [sys.executable, "-m", "agent_audit.cli", "verify", str(jsonl), "--pubkey", str(pub)],
+        [sys.executable, "-m", "chiplog.cli", "verify", str(jsonl), "--pubkey", str(pub)],
         capture_output=True,
         text=True,
     )

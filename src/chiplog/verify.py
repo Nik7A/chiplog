@@ -17,13 +17,13 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
-from agent_audit.integrity import (
+from chiplog.integrity import (
     VerificationFailure,
     compute_chain_link,
     verify_record,
 )
-from agent_audit.keys import load_public_key_from_pem
-from agent_audit.redact import redaction_authenticity
+from chiplog.keys import load_public_key_from_pem
+from chiplog.redact import redaction_authenticity
 
 
 class ChainCheckOutcome(str, Enum):

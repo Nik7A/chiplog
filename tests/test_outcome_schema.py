@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from agent_audit.schema.v1 import (
+from chiplog.schema.v1 import (
     SCHEMA_VERSION,
     Denied,
     Error,

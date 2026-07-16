@@ -11,11 +11,11 @@ import hashlib
 
 import pytest
 
-from agent_audit.canonical import (
+from chiplog.canonical import (
     canonical_for_chain_link,
     canonical_for_signing,
 )
-from agent_audit.schema.v1 import (
+from chiplog.schema.v1 import (
     ClockSource,
     Envelope,
     Header,

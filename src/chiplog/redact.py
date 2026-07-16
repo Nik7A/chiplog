@@ -37,20 +37,20 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from agent_audit.schema.v1 import RedactionEntry, ToolCall
+from chiplog.schema.v1 import RedactionEntry, ToolCall
 
 # Marker / sentinel shape. Module constants so tests and readers share one source.
 MARKER_TOKEN_KEY = "token"
 # A redacted dict KEY becomes this sentinel string. It embeds the per-record token
 # so a tool cannot forge a key that reads as recorder-redacted:
-#   __agent_audit_redacted_key__::<token>::<policy>[::dup<n>]
-REDACTED_KEY_PREFIX = "__agent_audit_redacted_key__::"
+#   __chiplog_redacted_key__::<token>::<policy>[::dup<n>]
+REDACTED_KEY_PREFIX = "__chiplog_redacted_key__::"
 # A redacted STRING-TYPED field (tool.name, mcp.server_id) becomes this sentinel.
 # Those fields are typed `str` in the schema, so a match cannot be replaced with a
 # marker dict — it is replaced with this string, which carries the per-record token
 # and the policy and no key/secret material:
-#   __agent_audit_redacted_value__::<token>::<policy>
-REDACTED_VALUE_PREFIX = "__agent_audit_redacted_value__::"
+#   __chiplog_redacted_value__::<token>::<policy>
+REDACTED_VALUE_PREFIX = "__chiplog_redacted_value__::"
 
 
 @dataclass(frozen=True)

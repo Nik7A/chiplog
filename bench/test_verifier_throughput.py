@@ -9,7 +9,7 @@ what an auditor actually waits on:
 - `verify_record` per-record: hash + signature only, records already parsed and
   in memory. This is the crypto ceiling and the number the v0.1 suite reported.
   Kept unchanged so the v0.1 -> v0.2 delta is apples-to-apples.
-- `verify_tree` end-to-end: what `agent-audit verify <dir>` actually does —
+- `verify_tree` end-to-end: what `chiplog verify <dir>` actually does —
   load the manifest, digest every file (a second full streaming pass for
   sha256), walk each chain, reconstruct the canonical form, and check every
   signature, all from disk. v0.2 added the manifest cross-checks and the digest
@@ -30,8 +30,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_audit.integrity import verify_record
-from agent_audit.verify import verify_tree
+from chiplog.integrity import verify_record
+from chiplog.verify import verify_tree
 
 ROUNDS = 5
 

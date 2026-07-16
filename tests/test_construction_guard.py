@@ -38,13 +38,13 @@ from cryptography.hazmat.primitives.serialization import (
     PublicFormat,
 )
 
-from agent_audit.adapters.claude_agent_sdk import AuditHook
-from agent_audit.adapters.langgraph import AuditMiddleware, audited_tool
-from agent_audit.adapters.openai_agents import AuditHooks
-from agent_audit.emit import AuditRecorder, RecordBuildError
-from agent_audit.integrity import compute_chain_link
-from agent_audit.keys import SigningKey, compute_key_id, load_public_key
-from agent_audit.schema.v1 import (
+from chiplog.adapters.claude_agent_sdk import AuditHook
+from chiplog.adapters.langgraph import AuditMiddleware, audited_tool
+from chiplog.adapters.openai_agents import AuditHooks
+from chiplog.emit import AuditRecorder, RecordBuildError
+from chiplog.integrity import compute_chain_link
+from chiplog.keys import SigningKey, compute_key_id, load_public_key
+from chiplog.schema.v1 import (
     NoGateReason,
     Output,
     ToolCall,
@@ -52,9 +52,9 @@ from agent_audit.schema.v1 import (
     success,
     ungated,
 )
-from agent_audit.sinks.base import InMemorySink
-from agent_audit.sinks.local_file import LocalFileSink
-from agent_audit.verify import ChainCheckOutcome, verify_log
+from chiplog.sinks.base import InMemorySink
+from chiplog.sinks.local_file import LocalFileSink
+from chiplog.verify import ChainCheckOutcome, verify_log
 
 # A secret that, if laundered by `str()`/`default=str`, would show up verbatim in
 # the signed canonical bytes.

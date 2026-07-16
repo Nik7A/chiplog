@@ -30,16 +30,16 @@ from typing import Any
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from agent_audit.emit import AuditRecorder
-from agent_audit.integrity import verify_record
-from agent_audit.keys import SigningKey, compute_key_id
-from agent_audit.manifest import RedactionState
-from agent_audit.redact import (
+from chiplog.emit import AuditRecorder
+from chiplog.integrity import verify_record
+from chiplog.keys import SigningKey, compute_key_id
+from chiplog.manifest import RedactionState
+from chiplog.redact import (
     RedactionConfig,
     redaction_authenticity,
     redact_value,
 )
-from agent_audit.schema.v1 import (
+from chiplog.schema.v1 import (
     NoGateReason,
     Output,
     ToolCall,
@@ -47,8 +47,8 @@ from agent_audit.schema.v1 import (
     success,
     ungated,
 )
-from agent_audit.sinks.base import InMemorySink
-from agent_audit.sinks.local_file import LocalFileSink
+from chiplog.sinks.base import InMemorySink
+from chiplog.sinks.local_file import LocalFileSink
 
 
 # ---------------------------------------------------------------------------
@@ -157,7 +157,7 @@ async def test_enabled_recorder_moves_manifest_from_unknown_to_enabled(
 def test_absent_flag_reads_unknown_not_enabled() -> None:
     """A pre-v1.2 manifest carries no redaction_state — it must read UNKNOWN,
     never 'enabled'. The old hardcoded `redaction_disabled: false` was a lie."""
-    from agent_audit.manifest import Manifest
+    from chiplog.manifest import Manifest
 
     m = Manifest.from_dict({"schema_version": "manifest.v1.0"})
     assert m.redaction_state == RedactionState.UNKNOWN
@@ -324,7 +324,7 @@ async def test_tool_replaying_a_stale_token_is_still_forged(
 async def test_tool_forged_sentinel_key_is_detected(
     recorder: AuditRecorder,
 ) -> None:
-    from agent_audit.redact import REDACTED_KEY_PREFIX
+    from chiplog.redact import REDACTED_KEY_PREFIX
 
     fake_key = f"{REDACTED_KEY_PREFIX}deadbeefdeadbeef::pii.deny.email"
     signed = await _record(recorder, output=Output(body={fake_key: {"x": 1}}))
@@ -362,7 +362,7 @@ async def test_disabled_record_has_no_token_and_no_markers(
 async def test_lifecycle_attribute_secret_redacted_and_key_inspected(
     recorder: AuditRecorder, signing_key: SigningKey
 ) -> None:
-    from agent_audit.schema.v1 import (
+    from chiplog.schema.v1 import (
         LifecyclePhase,
         node_transition,
     )

@@ -1,4 +1,4 @@
-"""agent-audit CLI — verify / inspect / pubkey-fingerprint.
+"""chiplog CLI — verify / inspect / pubkey-fingerprint.
 
 Exit codes are STABLE and documented in SIGNING.md:
   0 — ok
@@ -49,19 +49,19 @@ from pathlib import Path
 
 import click
 
-from agent_audit.adapters.claude_code import (
+from chiplog.adapters.claude_code import (
     HookConfig,
     emit_from_hook,
     parse_hook_input,
 )
-from agent_audit.keys import load_public_key
-from agent_audit.report import (
+from chiplog.keys import load_public_key
+from chiplog.report import (
     format_json_report,
     format_text_report,
     format_tree_json_report,
     format_tree_text_report,
 )
-from agent_audit.verify import ChainCheckOutcome, verify_log, verify_tree
+from chiplog.verify import ChainCheckOutcome, verify_log, verify_tree
 
 EXIT_OK = 0
 EXIT_CHAIN_BREAK = 1
@@ -92,7 +92,7 @@ _OUTCOME_TO_EXIT: dict[ChainCheckOutcome, int] = {
 
 @click.group()
 def cli() -> None:
-    """agent-audit — verify and inspect AI agent audit trails."""
+    """chiplog — verify and inspect AI agent audit trails."""
 
 
 @cli.command("verify")
@@ -133,7 +133,7 @@ def cmd_verify(log_path: Path, pubkey_paths: tuple[Path, ...], fmt: str) -> None
         try:
             key, key_id = load_public_key(p)
         except (OSError, ValueError, TypeError) as e:
-            click.echo(f"agent-audit: failed to load public key {p}: {e}", err=True)
+            click.echo(f"chiplog: failed to load public key {p}: {e}", err=True)
             sys.exit(EXIT_KEY_RESOLUTION)
         pubkeys[key_id] = key
 
@@ -148,7 +148,7 @@ def cmd_verify(log_path: Path, pubkey_paths: tuple[Path, ...], fmt: str) -> None
     # Single-file mode — identical semantics to v0.1.
     if not pubkeys:
         click.echo(
-            "agent-audit: --pubkey is required when verifying a single file",
+            "chiplog: --pubkey is required when verifying a single file",
             err=True,
         )
         sys.exit(EXIT_KEY_RESOLUTION)
@@ -173,7 +173,7 @@ def cmd_pubkey_fingerprint(pubkey_path: Path) -> None:
     try:
         _, key_id = load_public_key(pubkey_path)
     except (OSError, ValueError, TypeError) as e:
-        click.echo(f"agent-audit: failed to load public key: {e}", err=True)
+        click.echo(f"chiplog: failed to load public key: {e}", err=True)
         sys.exit(EXIT_KEY_RESOLUTION)
     click.echo(key_id)
 
@@ -245,7 +245,7 @@ def _cmd_inspect(log_path: Path, head: int) -> None:
         "Override chain_id for all hook records. Use a stable string "
         "(e.g. 'daemon-global') to write a single linked chain across many "
         "sessions, instead of one chain per session_id. Takes precedence "
-        "over the AGENT_AUDIT_CHAIN_ID environment variable."
+        "over the CHIPLOG_CHAIN_ID environment variable."
     ),
 )
 def cmd_hook_record(chain_id: str | None) -> None:
@@ -258,10 +258,10 @@ def cmd_hook_record(chain_id: str | None) -> None:
 
     Config (CLI flag > env > default):
       --chain-id               (overrides env)
-      AGENT_AUDIT_DIR          (default: ~/.config/agent-audit)
-      AGENT_AUDIT_SIGNING_KEY  (default: <dir>/signing.key)
-      AGENT_AUDIT_PUBKEY       (default: <dir>/signing.pub, if it exists)
-      AGENT_AUDIT_CHAIN_ID     (default: hook payload's session_id)
+      CHIPLOG_DIR          (default: ~/.config/chiplog)
+      CHIPLOG_SIGNING_KEY  (default: <dir>/signing.key)
+      CHIPLOG_PUBKEY       (default: <dir>/signing.pub, if it exists)
+      CHIPLOG_CHAIN_ID     (default: hook payload's session_id)
     """
     import dataclasses
     import fcntl

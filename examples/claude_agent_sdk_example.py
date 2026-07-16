@@ -8,7 +8,7 @@ This script:
   4. Drives AuditHook directly through its callback with two synthetic
      ``PostToolUse`` inputs, mirroring what the SDK feeds it during a real
      session
-  5. Reads the resulting JSONL audit log + runs `agent-audit verify`
+  5. Reads the resulting JSONL audit log + runs `chiplog verify`
   6. Prints a one-line summary per record
 
 Run with:  python examples/claude_agent_sdk_example.py
@@ -31,8 +31,8 @@ from cryptography.hazmat.primitives.serialization import (
     PublicFormat,
 )
 
-from agent_audit import AuditRecorder, LocalFileSink, load_signing_key
-from agent_audit.adapters.claude_agent_sdk import AuditHook
+from chiplog import AuditRecorder, LocalFileSink, load_signing_key
+from chiplog.adapters.claude_agent_sdk import AuditHook
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +128,7 @@ def main() -> None:
         pubkey_path = signing_key_path.with_suffix(".pub")
         verify = subprocess.run(
             [
-                "agent-audit",
+                "chiplog",
                 "verify",
                 str(jsonl_path),
                 "--pubkey",

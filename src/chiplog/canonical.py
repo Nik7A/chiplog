@@ -28,7 +28,7 @@ from typing import Any
 
 import rfc8785
 
-from agent_audit.schema.v1 import SIG_FORM_VERSION as V1_SIG_FORM_VERSION
+from chiplog.schema.v1 import SIG_FORM_VERSION as V1_SIG_FORM_VERSION
 
 
 def _record_as_dict(record: Any) -> dict[str, Any]:

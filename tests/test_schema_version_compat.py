@@ -17,9 +17,9 @@ from pathlib import Path
 from click.testing import CliRunner
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
-from agent_audit.cli import EXIT_OK, cli
-from agent_audit.keys import load_public_key
-from agent_audit.verify import ChainCheckOutcome, verify_log
+from chiplog.cli import EXIT_OK, cli
+from chiplog.keys import load_public_key
+from chiplog.verify import ChainCheckOutcome, verify_log
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

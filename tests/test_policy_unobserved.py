@@ -15,10 +15,10 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from pydantic import ValidationError
 
-from agent_audit.emit import AuditRecorder
-from agent_audit.integrity import verify_record
-from agent_audit.keys import SigningKey, compute_key_id
-from agent_audit.schema.v1 import (
+from chiplog.emit import AuditRecorder
+from chiplog.integrity import verify_record
+from chiplog.keys import SigningKey, compute_key_id
+from chiplog.schema.v1 import (
     Output,
     PolicyUnobservedReason,
     ToolCall,
@@ -26,7 +26,7 @@ from agent_audit.schema.v1 import (
     policy_unobserved,
     success,
 )
-from agent_audit.sinks.base import InMemorySink
+from chiplog.sinks.base import InMemorySink
 
 
 def _signing_key() -> SigningKey:
@@ -80,7 +80,7 @@ async def test_record_carries_unobserved_policy_and_verifies() -> None:
 def test_policy_context_discriminates_the_three_variants() -> None:
     """PolicyContext accepts all three kinds via its discriminator; a bogus kind
     is rejected rather than silently coerced."""
-    from agent_audit.schema.v1 import Payload
+    from chiplog.schema.v1 import Payload
 
     def _payload(policy_dict: dict[str, object]) -> Payload:
         return Payload.model_validate(
@@ -109,7 +109,7 @@ def test_adapters_no_longer_hardcode_auto_allowed_low_risk() -> None:
     """No adapter may assert the fabricated `ungated(AUTO_ALLOWED_LOW_RISK)`
     policy — that is the 100%-of-records lie this task removes. They must use
     `policy_unobserved(NO_GATE_SIGNAL)` instead."""
-    adapters_dir = Path(__file__).resolve().parents[1] / "src" / "agent_audit" / "adapters"
+    adapters_dir = Path(__file__).resolve().parents[1] / "src" / "chiplog" / "adapters"
     offenders: list[str] = []
     for py in adapters_dir.glob("*.py"):
         text = py.read_text()
@@ -124,7 +124,7 @@ def test_unobserved_policy_rejects_unknown_field_extra_forbid() -> None:
     """A risk/decision must never be smuggled into policy_unobserved via an extra field."""
     import pytest
     from pydantic import ValidationError
-    from agent_audit.schema.v1 import UnobservedPolicy, PolicyUnobservedReason
+    from chiplog.schema.v1 import UnobservedPolicy, PolicyUnobservedReason
 
     with pytest.raises(ValidationError):
         UnobservedPolicy.model_validate(

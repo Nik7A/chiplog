@@ -18,7 +18,7 @@ import time
 from datetime import datetime, timezone
 
 # Re-export from schema so callers have one ClockSource, not two.
-from agent_audit.schema.v1 import ClockSource
+from chiplog.schema.v1 import ClockSource
 
 __all__ = ["ClockSource", "monotonic_ns", "now_utc_rfc3339_ns"]
 

@@ -2,7 +2,7 @@
 
 See SIGNING.md for the byte-level canonical form rules. This module defines
 the *shape* of records — canonicalization, hashing, and signing live in
-agent_audit.canonical and agent_audit.integrity.
+chiplog.canonical and chiplog.integrity.
 
 Key design choices encoded here:
 
@@ -14,7 +14,7 @@ Key design choices encoded here:
 - MCP fields are first-class on the tool object (server_id, server_version,
   capability_namespace, transport). Non-MCP tools just omit the mcp object.
 - envelope.hash and envelope.signature are Optional during construction; they
-  are populated by the signing path in agent_audit.integrity. The canonical
+  are populated by the signing path in chiplog.integrity. The canonical
   form for signing excludes both (see SIGNING.md §2.1).
 """
 
@@ -609,7 +609,7 @@ class Payload(BaseModel):
     outcome: OutcomeContext
     redaction: list[RedactionEntry] = Field(default_factory=list)
     # Every JCS-hostile value the normalization pass replaced with a marker
-    # (see agent_audit.normalize). Default empty — a pre-v1.2 record simply omits
+    # (see chiplog.normalize). Default empty — a pre-v1.2 record simply omits
     # it, and the verifier reads raw dicts, so its absence never breaks
     # verification. Announced so no substitution is silent.
     unrepresentable: list[UnrepresentableEntry] = Field(default_factory=list)

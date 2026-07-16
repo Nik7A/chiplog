@@ -25,14 +25,14 @@ from cryptography.hazmat.primitives.serialization import (
     PublicFormat,
 )
 
-from agent_audit.emit import AuditRecorder
-from agent_audit.integrity import compute_chain_link, verify_record
-from agent_audit.keys import SigningKey, compute_key_id
-from agent_audit.manifest import Manifest
-from agent_audit.redact import RedactionConfig
-from agent_audit.schema.v1 import NoGateReason, Output, ToolCall, success, ungated
-from agent_audit.sinks.base import DiskFullError, SinkError
-from agent_audit.sinks.local_file import LocalFileSink
+from chiplog.emit import AuditRecorder
+from chiplog.integrity import compute_chain_link, verify_record
+from chiplog.keys import SigningKey, compute_key_id
+from chiplog.manifest import Manifest
+from chiplog.redact import RedactionConfig
+from chiplog.schema.v1 import NoGateReason, Output, ToolCall, success, ungated
+from chiplog.sinks.base import DiskFullError, SinkError
+from chiplog.sinks.local_file import LocalFileSink
 
 
 # ---------------------------------------------------------------------------
@@ -222,7 +222,7 @@ async def test_disk_full_surfaces_as_disk_full_error(
         return real_open(*args, **kwargs)  # type: ignore[arg-type]
 
     monkeypatch.setattr(
-        "agent_audit.sinks.local_file.open", fake_open, raising=False
+        "chiplog.sinks.local_file.open", fake_open, raising=False
     )
 
     with pytest.raises(DiskFullError, match="disk space"):

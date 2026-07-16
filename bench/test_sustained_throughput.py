@@ -16,8 +16,8 @@ import asyncio
 
 import pytest
 
-from agent_audit.emit import AuditRecorder
-from agent_audit.schema.v1 import Output, ToolCall
+from chiplog.emit import AuditRecorder
+from chiplog.schema.v1 import Output, ToolCall
 
 from conftest import BENCH_OUTCOME, BENCH_POLICY
 

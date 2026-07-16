@@ -46,8 +46,8 @@ from typing import Any
 import pytest
 from conftest import BENCH_OUTCOME, BENCH_POLICY
 
-from agent_audit.emit import AuditRecorder
-from agent_audit.schema.v1 import Output, ToolCall
+from chiplog.emit import AuditRecorder
+from chiplog.schema.v1 import Output, ToolCall
 
 CONCURRENCY = 8
 RECORDS_PER_ROUND = 1000

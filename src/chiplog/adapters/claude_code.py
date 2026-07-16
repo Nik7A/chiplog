@@ -1,4 +1,4 @@
-"""Claude Code hooks adapter — agent-audit's primary v0.1 instrumentation path.
+"""Claude Code hooks adapter — chiplog's primary v0.1 instrumentation path.
 
 Register BOTH events in `~/.claude/settings.json` with matcher `*`:
 
@@ -6,12 +6,12 @@ Register BOTH events in `~/.claude/settings.json` with matcher `*`:
       "hooks": {
         "PostToolUse": [
           { "matcher": "*", "hooks": [
-            { "type": "command", "command": "agent-audit hook-record" }
+            { "type": "command", "command": "chiplog hook-record" }
           ]}
         ],
         "PostToolUseFailure": [
           { "matcher": "*", "hooks": [
-            { "type": "command", "command": "agent-audit hook-record" }
+            { "type": "command", "command": "chiplog hook-record" }
           ]}
         ]
       }
@@ -62,7 +62,7 @@ Concurrent invocations (parallel `Task` spawns in Claude Code) are
 serialised via flock on `<dir>/state.lock` so the chain head stays
 consistent across processes. See `cli.py::cmd_hook_record`.
 
-Defaults to one chain per session_id. Set `AGENT_AUDIT_CHAIN_ID` in the
+Defaults to one chain per session_id. Set `CHIPLOG_CHAIN_ID` in the
 daemon's environment if you want a single global chain across many
 sessions (Nikolai's daemon-driven Claude flow).
 """
@@ -76,7 +76,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from agent_audit.adapters._claude_hooks import (
+from chiplog.adapters._claude_hooks import (
     PERMISSION_DENIED_POLICY_ID,
     is_failure_event,
     is_interrupted,
@@ -84,9 +84,9 @@ from agent_audit.adapters._claude_hooks import (
     is_unrequested_background,
     is_user_denial,
 )
-from agent_audit.emit import AuditRecorder
-from agent_audit.keys import load_signing_key
-from agent_audit.schema.v1 import (
+from chiplog.emit import AuditRecorder
+from chiplog.keys import load_signing_key
+from chiplog.schema.v1 import (
     GateDecision,
     MCPCapabilityNamespace,
     MCPContext,
@@ -103,8 +103,8 @@ from agent_audit.schema.v1 import (
     policy_unobserved,
     unobserved,
 )
-from agent_audit.schema.v1 import error as error_outcome
-from agent_audit.sinks.local_file import LocalFileSink
+from chiplog.schema.v1 import error as error_outcome
+from chiplog.sinks.local_file import LocalFileSink
 
 # Claude Code MCP tools follow the convention `mcp__<server>__<tool>`.
 _MCP_PREFIX = "mcp__"
@@ -113,7 +113,7 @@ _MCP_PREFIX = "mcp__"
 _OUTPUT_SIZE_CAP = 64 * 1024
 
 # Default config search paths.
-_DEFAULT_AUDIT_DIR = Path("~/.config/agent-audit")
+_DEFAULT_AUDIT_DIR = Path("~/.config/chiplog")
 _DEFAULT_SIGNING_KEY = "signing.key"
 _DEFAULT_PUBKEY = "signing.pub"
 
@@ -165,18 +165,18 @@ class HookConfig:
     @classmethod
     def from_env(cls, environ: dict[str, str] | None = None) -> HookConfig:
         env = os.environ if environ is None else environ
-        audit_dir = Path(env.get("AGENT_AUDIT_DIR", str(_DEFAULT_AUDIT_DIR))).expanduser()
+        audit_dir = Path(env.get("CHIPLOG_DIR", str(_DEFAULT_AUDIT_DIR))).expanduser()
         signing_key_path = Path(
-            env.get("AGENT_AUDIT_SIGNING_KEY", str(audit_dir / _DEFAULT_SIGNING_KEY))
+            env.get("CHIPLOG_SIGNING_KEY", str(audit_dir / _DEFAULT_SIGNING_KEY))
         ).expanduser()
-        pubkey_env = env.get("AGENT_AUDIT_PUBKEY")
+        pubkey_env = env.get("CHIPLOG_PUBKEY")
         pubkey_path: Path | None
         if pubkey_env:
             pubkey_path = Path(pubkey_env).expanduser()
         else:
             default_pub = audit_dir / _DEFAULT_PUBKEY
             pubkey_path = default_pub if default_pub.exists() else None
-        chain_id_override = env.get("AGENT_AUDIT_CHAIN_ID")
+        chain_id_override = env.get("CHIPLOG_CHAIN_ID")
         return cls(
             audit_dir=audit_dir,
             signing_key_path=signing_key_path,
@@ -243,7 +243,7 @@ def serialize_tool_response(tool_response: Any) -> Output:
         return Output(body=tool_response)
 
     sha = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
-    truncated = encoded[: _OUTPUT_SIZE_CAP - 64] + "...[truncated by agent-audit]"
+    truncated = encoded[: _OUTPUT_SIZE_CAP - 64] + "...[truncated by chiplog]"
     return Output(
         body=truncated,
         truncated=True,

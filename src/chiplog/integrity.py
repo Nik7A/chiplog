@@ -22,8 +22,8 @@ from typing import Any
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
-from agent_audit.canonical import canonical_for_chain_link, canonical_for_signing
-from agent_audit.keys import SigningKey
+from chiplog.canonical import canonical_for_chain_link, canonical_for_signing
+from chiplog.keys import SigningKey
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-"""OpenAI Agents SDK adapter for ai-agent-audit.
+"""OpenAI Agents SDK adapter for chiplog.
 
 **Use `@audited_tool` for audit-grade coverage. `AuditHooks` cannot detect failures.**
 
@@ -18,7 +18,7 @@ record at all.
 Both branches are unusable for audit: one launders failures into successes, the
 other drops them. Therefore:
 
-    from agent_audit import audited_tool  # runtime-agnostic
+    from chiplog import audited_tool  # runtime-agnostic
 
     @audited_tool(recorder, session_id="my-run")
     async def search(query: str) -> str:
@@ -43,8 +43,8 @@ from typing import Any
 
 from uuid import uuid7
 
-from agent_audit.emit import AuditRecorder
-from agent_audit.schema.v1 import (
+from chiplog.emit import AuditRecorder
+from chiplog.schema.v1 import (
     PolicyUnobservedReason,
     Output,
     ToolCall,
@@ -122,8 +122,8 @@ class AuditHooks(_RunHooks):
 
     Usage:
         from agents import Agent, Runner
-        from agent_audit import AuditRecorder, LocalFileSink, load_signing_key
-        from agent_audit.adapters.openai_agents import AuditHooks
+        from chiplog import AuditRecorder, LocalFileSink, load_signing_key
+        from chiplog.adapters.openai_agents import AuditHooks
 
         recorder = AuditRecorder(
             sink=LocalFileSink(dir="./audit"),

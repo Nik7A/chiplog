@@ -1,4 +1,4 @@
-"""Claude Agent SDK (Python) adapter — `HookCallback` for ai-agent-audit.
+"""Claude Agent SDK (Python) adapter — `HookCallback` for chiplog.
 
 The Claude Agent SDK exposes a native hooks system (see
 ``claude_agent_sdk.HookMatcher`` / ``HookCallback``). ``AuditHook`` is a
@@ -12,8 +12,8 @@ tool calls silently go unaudited:
     from claude_agent_sdk import (
         ClaudeAgentOptions, ClaudeSDKClient, HookMatcher,
     )
-    from agent_audit import AuditRecorder, LocalFileSink, load_signing_key
-    from agent_audit.adapters.claude_agent_sdk import AuditHook
+    from chiplog import AuditRecorder, LocalFileSink, load_signing_key
+    from chiplog.adapters.claude_agent_sdk import AuditHook
 
     recorder = AuditRecorder(
         sink=LocalFileSink(dir="./audit"),
@@ -60,7 +60,7 @@ from typing import Any
 
 from uuid import uuid7
 
-from agent_audit.adapters._claude_hooks import (
+from chiplog.adapters._claude_hooks import (
     PERMISSION_DENIED_POLICY_ID,
     is_failure_event,
     is_interrupted,
@@ -68,8 +68,8 @@ from agent_audit.adapters._claude_hooks import (
     is_unrequested_background,
     is_user_denial,
 )
-from agent_audit.emit import AuditRecorder
-from agent_audit.schema.v1 import (
+from chiplog.emit import AuditRecorder
+from chiplog.schema.v1 import (
     GateDecision,
     PolicyUnobservedReason,
     OutcomeContext,

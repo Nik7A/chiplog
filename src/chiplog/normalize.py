@@ -27,7 +27,7 @@ Why this exists — the failure it closes:
 
 What a marker is — and what it deliberately is NOT:
 
-  {"__agent_audit__": "unrepresentable", "reason": <r>, "py_type": <type>,
+  {"__chiplog__": "unrepresentable", "reason": <r>, "py_type": <type>,
    "sha256": <hex of sha256(repr(value))>}
 
   It records TYPE + HASH only, never a reconstructed value. The original
@@ -56,10 +56,10 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
-from agent_audit.schema.v1 import UnrepresentableEntry, UnrepresentableReason
+from chiplog.schema.v1 import UnrepresentableEntry, UnrepresentableReason
 
 # Marker shape. Kept as module constants so tests and readers share one source.
-MARKER_KEY = "__agent_audit__"
+MARKER_KEY = "__chiplog__"
 MARKER_TAG = "unrepresentable"
 
 # JCS canonicalizes numbers as IEEE-754 doubles. Integers with abs value >= 2**53
@@ -188,7 +188,7 @@ def _normalize_dict(
         while skey in result:
             # Deterministic, JCS-safe, and visibly synthetic so a reader can tell
             # this key was disambiguated from a collision rather than authored.
-            skey = f"{base}::__agent_audit_dupkey_{dup}__"
+            skey = f"{base}::__chiplog_dupkey_{dup}__"
             dup += 1
 
         entries.append(
