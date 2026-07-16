@@ -1,0 +1,93 @@
+name: release
+
+# Publishes to PyPI on a version tag, via Trusted Publishing (OIDC). There is no
+# API token anywhere — not in a secret, not in a file. PyPI verifies that the
+# request came from this repo and this workflow, and mints a short-lived
+# credential for that one upload. Nothing to store, nothing to leak, nothing to
+# rotate.
+#
+# PyPI side, once: pypi.org -> Publishing -> add a pending publisher for
+#   owner Nik7A, repo chiplog, workflow release.yml, environment pypi
+# After the first upload it stops being "pending" and becomes the project's
+# publisher.
+#
+# Release: bump `version` in pyproject.toml, land it, then
+#   git tag -s v0.2.0 -m "..." && git push origin v0.2.0
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      # A tag that says v0.2.0 over a tree that says 0.3.0 would publish a
+      # version nobody can trace back to a commit. Refuse rather than guess.
+      - name: Tag must match the version in pyproject
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          proj="$(uv version --short)"
+          if [ "$tag" != "$proj" ]; then
+            echo "tag $GITHUB_REF_NAME says $tag, pyproject says $proj" >&2
+            exit 1
+          fi
+          echo "tag and pyproject agree on $proj"
+
+      # The tag can point anywhere, including a commit CI never saw. Re-run the
+      # gate here rather than trust that some earlier run was green.
+      - name: Sync
+        run: uv sync
+
+      - name: Tests
+        run: uv run pytest -q
+
+      - name: Types
+        run: uv run mypy --strict src/
+
+      - name: Lint
+        run: uv run ruff check src/ tests/
+
+      - name: Build
+        run: uv build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+
+    # A deployment environment, so the publish step can carry an approval gate
+    # or restrict which refs reach it. It is also half of what PyPI matches
+    # against for the pending publisher.
+    environment:
+      name: pypi
+      url: https://pypi.org/project/chiplog/
+
+    # id-token: write is what makes Trusted Publishing work — it lets the job
+    # request an OIDC identity. Nothing else in this job needs any permission,
+    # so nothing else gets one.
+    permissions:
+      id-token: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      # Signs the distributions with PEP 740 attestations by default under
+      # Trusted Publishing, so the package carries evidence of where it was
+      # built. Fitting, for this one.
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
