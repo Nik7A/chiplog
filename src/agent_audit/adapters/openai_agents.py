@@ -1,13 +1,39 @@
-"""OpenAI Agents SDK adapter — `RunHooks` for ai-agent-audit.
+"""OpenAI Agents SDK adapter for ai-agent-audit.
 
-Plug `AuditHooks(recorder)` into `Runner.run(..., hooks=...)` and every
-local tool call performed during the run produces one signed audit record.
+**Use `@audited_tool` for audit-grade coverage. `AuditHooks` cannot detect failures.**
 
-Designed against openai-agents 0.17.x. Older versions without
-`agents.RunHooks` will get a clear ImportError when constructing
-`AuditHooks`; the `@audited_tool` decorator from the LangGraph adapter
-also works on raw function-tool callables for users who prefer
-per-callable instrumentation over a runtime-level hook.
+`RunHooks` structurally cannot observe a failed tool call. When a function tool
+raises, the SDK catches the exception itself and calls `failure_error_function`
+(default: `default_tool_error_function`), which converts it into a plain string —
+"An error occurred while running the tool. Please try again. Error: ...". That
+string is returned as an ordinary tool result, so `on_tool_end` fires with it and
+cannot distinguish it from a legitimate string return. Timeouts behave the same
+way: `timeout_behavior` defaults to "error_as_result".
+
+In the alternative configuration (`failure_error_function=None`,
+`timeout_behavior="raise_exception"`) the exception — `ToolTimeoutError` —
+propagates instead, `on_tool_end` never fires, and the failed call produces no
+record at all.
+
+Both branches are unusable for audit: one launders failures into successes, the
+other drops them. Therefore:
+
+    from agent_audit import audited_tool  # runtime-agnostic
+
+    @audited_tool(recorder, session_id="my-run")
+    async def search(query: str) -> str:
+        ...
+
+The decorator wraps your callable and therefore runs *inside* the SDK's failure
+handling, seeing the live exception before conversion.
+
+`AuditHooks` remains for users who want a runtime-level hook. Because it cannot
+tell a success from an SDK-laundered failure, every record it writes carries
+``outcome=Unobserved(reason="runtime_launders_exceptions")`` — never ``Success``.
+It asserts what it actually knows and nothing more. If you need the outcome
+itself, use ``@audited_tool``.
+
+Designed against openai-agents 0.18.2.
 """
 
 from __future__ import annotations
@@ -18,18 +44,14 @@ from typing import Any
 from uuid import uuid7
 
 from agent_audit.emit import AuditRecorder
-from agent_audit.schema.v1 import NoGateReason, Output, ToolCall, ungated
-
-
-def _coerce_to_json(value: Any) -> Any:
-    """Round-trip through JSON to drop non-serialisable Python objects.
-
-    OpenAI Agents SDK tool outputs are typically str or JSON-shaped, but
-    custom tools may return arbitrary Python objects. The fallback to
-    str() via json.dumps(default=str) keeps the audit record canonicalisable
-    without losing a human-readable hint of what the value was.
-    """
-    return json.loads(json.dumps(value, default=str))
+from agent_audit.schema.v1 import (
+    PolicyUnobservedReason,
+    Output,
+    ToolCall,
+    UnobservedReason,
+    policy_unobserved,
+    unobserved,
+)
 
 
 def _extract_tool_name(tool: Any, fallback_context: Any) -> str:
@@ -114,9 +136,14 @@ class AuditHooks(_RunHooks):
             hooks=AuditHooks(recorder=recorder, session_id="demo"),
         )
 
-    Records are emitted on ``on_tool_end``; failed tool calls are not
-    recorded in v0.1 (the ``Stop`` / ``SubagentStop`` coverage shipping
-    in v0.2 closes that gap).
+    Records are emitted on ``on_tool_end`` with
+    ``outcome=Unobserved(reason="runtime_launders_exceptions")``.
+
+    This hook cannot detect failures: the SDK converts tool exceptions into
+    ordinary string results before ``on_tool_end`` sees them, so a failed call and
+    a successful one are byte-identical from here. Rather than sign a ``success``
+    it cannot vouch for, it records that the outcome was unobservable and why.
+    Use ``@audited_tool`` on the tool callable for real outcome coverage.
     """
 
     def __init__(
@@ -127,7 +154,7 @@ class AuditHooks(_RunHooks):
     ) -> None:
         if not _RUN_HOOKS_AVAILABLE:
             raise ImportError(
-                "AuditHooks requires openai-agents >= 0.17. "
+                "AuditHooks requires openai-agents >= 0.18 (tested against 0.18.2). "
                 "Install via `pip install openai-agents`."
             )
         super().__init__()
@@ -138,13 +165,26 @@ class AuditHooks(_RunHooks):
         self, context: Any, agent: Any, tool: Any, result: Any
     ) -> None:
         """Emit one audit record for the completed tool invocation."""
+        # Hand the RAW extracted values to the recorder. It redacts, then runs
+        # `normalize_for_canonical`, which turns every JCS-hostile value (bytes,
+        # set, a non-string dict key, an out-of-domain int) into a faithful,
+        # ANNOUNCED marker. For a value that defeats even that (its repr() raises,
+        # a dict key's str() raises), the recorder's construction guard poisons
+        # the chain head and raises a typed RecordBuildError instead of dropping
+        # the call — so the loss is a chain break at verification time and a typed
+        # error out of this hook, never silent. Pre-laundering here with
+        # `json.dumps(default=str)` would defeat that guarantee: a non-string key
+        # would raise a raw `TypeError` (crashing this hook untyped, no chain
+        # break), and a hostile value would be stringified with nothing recorded
+        # in `payload.unrepresentable`.
         await self._recorder.record(
             session_id=self._session_id,
             step_id=str(uuid7()),
             tool=ToolCall(name=_extract_tool_name(tool, context)),
-            input=_coerce_to_json(_extract_tool_args(context)),
-            output=Output(body=_coerce_to_json(_extract_output_body(result))),
-            policy=ungated(NoGateReason.AUTO_ALLOWED_LOW_RISK),
+            input=_extract_tool_args(context),
+            output=Output(body=_extract_output_body(result)),
+            policy=policy_unobserved(PolicyUnobservedReason.NO_GATE_SIGNAL),
+            outcome=unobserved(UnobservedReason.RUNTIME_LAUNDERS_EXCEPTIONS),
             agent_name=getattr(agent, "name", None),
         )
 

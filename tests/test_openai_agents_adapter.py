@@ -4,7 +4,7 @@ Covers:
 - _extract_tool_name: tool.name preferred, falls back to context.tool_name, then "unknown_tool"
 - _extract_tool_args: parses JSON string from ToolContext.tool_arguments, passes through dicts, handles malformed
 - _extract_output_body: string passthrough, .output attribute, str() fallback
-- _coerce_to_json: non-serialisable objects survive via str() default
+- raw extracted args/output are handed to the recorder; its normalize pass marks hostile values
 - AuditHooks.on_tool_end emits a signed record via the recorder
 - The emitted record carries the expected tool name, parsed args, output body, and agent name
 - The record verifies under the same signing key
@@ -21,7 +21,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from agent_audit.adapters.openai_agents import (
     AuditHooks,
-    _coerce_to_json,
     _extract_output_body,
     _extract_tool_args,
     _extract_tool_name,
@@ -139,16 +138,6 @@ def test_extract_output_body_falls_back_to_str() -> None:
     assert _extract_output_body(Thing()) == "<Thing custom>"
 
 
-def test_coerce_to_json_drops_non_serialisable() -> None:
-    class Opaque:
-        def __repr__(self) -> str:
-            return "<Opaque>"
-
-    payload = {"k": Opaque(), "n": 1}
-    coerced = _coerce_to_json(payload)
-    assert coerced == {"k": "<Opaque>", "n": 1}
-
-
 # ---------------------------------------------------------------------------
 # AuditHooks integration
 # ---------------------------------------------------------------------------
@@ -239,3 +228,65 @@ async def test_chain_of_two_records(
     pubkey_by_id = {signing_key.key_id: signing_key.public_key}
     for rec in (first, second):
         assert verify_record(rec, pubkey_by_id).is_valid
+
+
+# ---------------------------------------------------------------------------
+# Unobserved outcome — AuditHooks must never sign Success
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_audited_tool_on_openai_callable_records_error(
+    recorder: AuditRecorder, sink: InMemorySink
+) -> None:
+    """The decorator sits inside the SDK's failure handling and sees the real exception."""
+    from agent_audit.adapters.langgraph import audited_tool
+
+    @audited_tool(recorder, session_id="oai")
+    async def flaky_search(query: str) -> str:
+        raise RuntimeError("upstream 503")
+
+    with pytest.raises(RuntimeError):
+        await flaky_search("cats")
+
+    outcome = sink.records[-1]["payload"]["outcome"]
+    assert outcome["kind"] == "error"
+    assert outcome["error_type"] == "RuntimeError"
+    assert outcome["message"] == "upstream 503"
+
+
+@pytest.mark.asyncio
+async def test_audit_hooks_never_asserts_success(
+    recorder: AuditRecorder, sink: InMemorySink
+) -> None:
+    """on_tool_end cannot tell success from failure, so it must not claim either.
+
+    Even on a genuinely successful call the hook records Unobserved: from where
+    it sits, a success and an SDK-laundered failure are byte-identical.
+    """
+    hooks = AuditHooks(recorder=recorder, session_id="oai")
+    await hooks.on_tool_end(
+        context=FakeToolContext(tool_name="search", tool_arguments='{"q": "cats"}'),
+        agent=FakeAgent(name="researcher"),
+        tool=FakeTool(name="search"),
+        result="found 3 results",
+    )
+    assert sink.records[-1]["payload"]["outcome"] == {
+        "kind": "unobserved",
+        "reason": "runtime_launders_exceptions",
+    }
+
+
+@pytest.mark.asyncio
+async def test_audit_hooks_records_laundered_failure_as_unobserved(
+    recorder: AuditRecorder, sink: InMemorySink
+) -> None:
+    """The SDK's error text arrives as an ordinary result — still Unobserved, not Success."""
+    hooks = AuditHooks(recorder=recorder, session_id="oai")
+    await hooks.on_tool_end(
+        context=FakeToolContext(tool_name="search", tool_arguments='{"q": "cats"}'),
+        agent=FakeAgent(name="researcher"),
+        tool=FakeTool(name="search"),
+        result="An error occurred while running the tool. Please try again. Error: boom",
+    )
+    assert sink.records[-1]["payload"]["outcome"]["kind"] == "unobserved"
