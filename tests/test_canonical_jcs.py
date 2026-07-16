@@ -25,6 +25,7 @@ from agent_audit.schema.v1 import (
     Record,
     TimeBlock,
     ToolCall,
+    success,
     ungated,
 )
 
@@ -59,6 +60,7 @@ def make_test_vector_record() -> Record:
             input={"file_path": "/etc/hosts"},
             output=Output(body="127.0.0.1 localhost\n", truncated=False),
             policy=ungated(NoGateReason.AUTO_ALLOWED_LOW_RISK),
+            outcome=success(),
         ),
     )
 

@@ -30,7 +30,7 @@ from agent_audit.integrity import compute_chain_link, verify_record
 from agent_audit.keys import SigningKey, compute_key_id
 from agent_audit.manifest import Manifest
 from agent_audit.redact import RedactionConfig
-from agent_audit.schema.v1 import NoGateReason, Output, ToolCall, ungated
+from agent_audit.schema.v1 import NoGateReason, Output, ToolCall, success, ungated
 from agent_audit.sinks.base import DiskFullError, SinkError
 from agent_audit.sinks.local_file import LocalFileSink
 
@@ -62,6 +62,7 @@ def _ungated_record_args() -> dict[str, object]:
         input={"file_path": "/etc/hosts"},
         output=Output(body="127.0.0.1 localhost"),
         policy=ungated(NoGateReason.AUTO_ALLOWED_LOW_RISK),
+        outcome=success(),
     )
 
 
@@ -153,6 +154,7 @@ async def test_second_process_resumes_chain_via_manifest(
         input={},
         output=Output(body=""),
         policy=ungated(NoGateReason.AUTO_ALLOWED_LOW_RISK),
+        outcome=success(),
     )
 
     # r2.prev_hash must equal compute_chain_link(r1) — chain continues across
@@ -189,6 +191,7 @@ async def test_daily_rotation_writes_to_separate_files(
         input={},
         output=Output(body=""),
         policy=ungated(NoGateReason.AUTO_ALLOWED_LOW_RISK),
+        outcome=success(),
     )
 
     assert (tmp_path / "audit-2026-06-19.jsonl").exists()
@@ -292,6 +295,7 @@ async def test_rolling_sha256_matches_file_after_many_writes(
             input={},
             output=Output(body=""),
             policy=ungated(NoGateReason.AUTO_ALLOWED_LOW_RISK),
+            outcome=success(),
         )
 
     jsonl = next(tmp_path.glob("audit-*.jsonl"))

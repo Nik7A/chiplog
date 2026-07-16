@@ -25,10 +25,6 @@ class DiskFullError(SinkError):
     """Local file sink ran out of disk space — emitter must halt loudly."""
 
 
-class WALOverflowError(SinkError):
-    """Write-ahead log has accumulated more pending records than the cap."""
-
-
 @runtime_checkable
 class Sink(Protocol):
     """A destination for signed audit records."""
@@ -38,6 +34,23 @@ class Sink(Protocol):
     async def flush(self) -> None: ...
 
     async def close(self) -> None: ...
+
+
+@runtime_checkable
+class RedactionStateAware(Protocol):
+    """An OPTIONAL sink capability: receive the recorder's redaction state.
+
+    A sink that persists a manifest (e.g. LocalFileSink) implements this so the
+    recorder can DRIVE the attested redaction-disabled state honestly, per
+    record, instead of it being a disconnected constructor flag. The recorder
+    isinstance-checks for this capability, so a plain sink (InMemorySink, a test
+    wrapper, a future remote sink that doesn't attest redaction) simply doesn't
+    implement it and is left untouched. The signal is a per-call boolean; the
+    recorder never READS state back from the sink, so a sink cannot feed a stale
+    value into a genuine marker.
+    """
+
+    def note_redaction_disabled(self, observed_disabled: bool) -> None: ...
 
 
 class InMemorySink:
@@ -67,7 +80,7 @@ class InMemorySink:
 __all__ = [
     "DiskFullError",
     "InMemorySink",
+    "RedactionStateAware",
     "Sink",
     "SinkError",
-    "WALOverflowError",
 ]

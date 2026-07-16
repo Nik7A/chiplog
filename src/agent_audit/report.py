@@ -15,7 +15,10 @@ from __future__ import annotations
 import json
 from dataclasses import asdict
 
-from agent_audit.verify import LogVerificationResult
+from agent_audit.verify import (
+    LogVerificationResult,
+    TreeVerificationResult,
+)
 
 _REPORT_WIDTH = 78
 
@@ -81,4 +84,125 @@ def format_json_report(result: LogVerificationResult) -> str:
     return json.dumps(data, sort_keys=True, indent=2) + "\n"
 
 
-__all__ = ["format_json_report", "format_text_report"]
+# ---------------------------------------------------------------------------
+# Directory / manifest-aware report (v0.2)
+# ---------------------------------------------------------------------------
+
+
+def _tree_verdict_line(result: TreeVerificationResult) -> str:
+    """One honest verdict line for a whole-directory verification.
+
+    The verdict describes exactly what was and was not established. It never
+    reads "PASS" over off-canonical or unverifiable records, and never "FAIL"
+    over records that are merely unverifiable for want of a key.
+    """
+    o = result.outcome.value
+    if result.is_valid and not result.manifest_present:
+        return (
+            "VERDICT: LOG-ONLY PASS — records present verify and chain sequentially; "
+            "manifest cross-check skipped (whole-chain deletion NOT detectable)"
+        )
+    if result.is_valid:
+        return "VERDICT: PASS — every attested record verified and chains to the manifest head"
+    if result.outcome.value == "partial":
+        return (
+            f"VERDICT: PARTIAL — {result.verified_records} of {result.canonical_records} "
+            f"attested records verified under available keys; "
+            f"{result.unverifiable_no_key} unverifiable (no key)"
+        )
+    if result.outcome.value == "off_canonical":
+        return (
+            f"VERDICT: OFF-CANONICAL — {result.off_path_records} record(s) are off the "
+            f"canonical path the manifest attests (reason not observable). "
+            f"Of attested records, {result.verified_records} verified, "
+            f"{result.unverifiable_no_key} unverifiable (no key)"
+        )
+    if result.outcome.value == "manifest_integrity":
+        return (
+            "VERDICT: MANIFEST-INTEGRITY BREAK — the log disagrees with its own "
+            "manifest anchor (per-chain record_count or per-file sha256 / "
+            "record_count); see findings above. This is NOT a pass"
+        )
+    if result.outcome.value == "redaction_forgery":
+        return (
+            "VERDICT: REDACTION-FORGERY BREAK — a validly-signed record carries a "
+            "tool-forged redaction marker (no backing entry, or a token that does "
+            "not match the record's); see findings above. This is NOT a pass"
+        )
+    return f"VERDICT: {o.upper()} — see findings above"
+
+
+def format_tree_text_report(result: TreeVerificationResult) -> str:
+    """Deterministic plain-text report for a directory verification.
+
+    Byte-identical across runs (findings are emitted in discovery order, which is
+    itself deterministic: files sorted by date, chains sorted by id).
+    """
+    lines: list[str] = []
+    sep = "=" * _REPORT_WIDTH
+
+    lines.append("agent-audit directory verification report")
+    lines.append(sep)
+    lines.append("")
+    lines.append(f"root:               {result.root}")
+    lines.append(f"outcome:            {result.outcome.value}")
+    lines.append(f"files:              {len(result.files)}")
+    lines.append(f"manifest present:   {result.manifest_present}")
+    lines.append(
+        f"manifest pubkey_id: claimed={result.manifest_pubkey_id_claimed} "
+        f"derived={result.manifest_pubkey_id_derived}"
+    )
+    lines.append(
+        f"redaction state:    {result.manifest_redaction_state} "
+        f"(unknown = not attested, NOT 'enabled')"
+    )
+    lines.append(f"keys available:     {', '.join(result.available_key_ids) or '(none)'}")
+    lines.append(f"records total:      {result.total_records}")
+    lines.append(f"records canonical:  {result.canonical_records}")
+    lines.append(f"  verified:         {result.verified_records}")
+    lines.append(f"  unverifiable:     {result.unverifiable_no_key} (no key)")
+    lines.append(f"off-canonical:      {result.off_path_records}")
+
+    lines.append("")
+    lines.append("chains:")
+    for c in result.chains:
+        lines.append(
+            f"  - {c.chain_id}: manifest={c.manifest_record_count} "
+            f"log={c.records_in_log} canonical={c.canonical_count} "
+            f"verified={c.canonical_verified} "
+            f"unverifiable={c.canonical_unverifiable_no_key} "
+            f"off_path={c.off_path_records} "
+            f"head_reached={c.head_reached} genesis_ok={c.genesis_verified}"
+        )
+
+    if result.findings:
+        lines.append("")
+        lines.append("findings (facts, most-specific first):")
+        for f in result.findings:
+            scope = f" [{f.chain_id}]" if f.chain_id else ""
+            lines.append(f"  - {f.kind}{scope}: {f.detail}")
+
+    lines.append("")
+    lines.append(_tree_verdict_line(result))
+
+    lines.append("")
+    lines.append(sep)
+    lines.append(_NON_CLAIMS.rstrip())
+
+    return "\n".join(lines) + "\n"
+
+
+def format_tree_json_report(result: TreeVerificationResult) -> str:
+    """Machine-readable directory report — sorted keys for byte-determinism."""
+    data = asdict(result)
+    data["outcome"] = result.outcome.value
+    data["is_valid"] = result.is_valid
+    return json.dumps(data, sort_keys=True, indent=2) + "\n"
+
+
+__all__ = [
+    "format_json_report",
+    "format_text_report",
+    "format_tree_json_report",
+    "format_tree_text_report",
+]

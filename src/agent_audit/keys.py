@@ -125,4 +125,36 @@ def load_public_key(path: str | Path) -> tuple[Ed25519PublicKey, str]:
     return public_key, compute_key_id(public_key)
 
 
-__all__ = ["SigningKey", "compute_key_id", "load_public_key", "load_signing_key"]
+def load_public_key_from_pem(pem: str | bytes) -> tuple[Ed25519PublicKey, str]:
+    """Load an Ed25519 public key from in-memory PEM material. Returns (key, key_id).
+
+    Mirrors :func:`load_public_key` but takes the PEM bytes directly, so the
+    verifier can derive a key from ``manifest.pubkey_pem`` without a temp file.
+    The returned key_id is ALWAYS derived from the key material — it is never
+    read from the manifest's (potentially stale) ``pubkey_id`` field.
+
+    Refuses private-key PEMs for the same foot-gun reason as ``load_public_key``.
+    """
+    data = pem.encode("utf-8") if isinstance(pem, str) else pem
+
+    if b"PRIVATE KEY" in data:
+        raise ValueError(
+            "refusing to load PEM as a public key: material contains 'PRIVATE KEY'."
+        )
+
+    public_key = serialization.load_pem_public_key(data)
+    if not isinstance(public_key, Ed25519PublicKey):
+        raise TypeError(
+            f"PEM material is not Ed25519 — got {type(public_key).__name__}"
+        )
+
+    return public_key, compute_key_id(public_key)
+
+
+__all__ = [
+    "SigningKey",
+    "compute_key_id",
+    "load_public_key",
+    "load_public_key_from_pem",
+    "load_signing_key",
+]

@@ -35,8 +35,7 @@ from cryptography.hazmat.primitives.serialization import (
     PublicFormat,
 )
 
-from agent_audit import AuditRecorder, LocalFileSink, load_signing_key
-from agent_audit.adapters.langgraph import audited_tool
+from agent_audit import AuditRecorder, LocalFileSink, audited_tool, load_signing_key
 
 
 def main() -> int:

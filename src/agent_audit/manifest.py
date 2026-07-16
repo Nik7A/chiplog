@@ -14,11 +14,50 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from dataclasses import asdict, dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
 MANIFEST_SCHEMA_VERSION = "manifest.v1.0"
+
+
+class RedactionState(str, Enum):
+    """The recorder-attested redaction state of a log directory.
+
+    Tri-state, and that matters: the old boolean `redaction_disabled` could not
+    tell "someone confirmed redaction was ON" apart from "nobody wired the flag,
+    so it defaulted to false" — and reading the latter as "redaction was enabled"
+    is exactly the affirmative lie this wave removes.
+
+      - UNKNOWN: no recorder ever attested a state here. A pre-v1.2 manifest (no
+        `redaction_state` field) reads UNKNOWN, NEVER "enabled". Absence is not
+        evidence of redaction.
+      - ENABLED: a recorder wrote at least one record with redaction ON, and none
+        with it OFF.
+      - DISABLED: at least one record was written with redaction OFF. This LATCHES
+        (see `latch`): once true it never downgrades, because a single cleartext
+        record means the log is not a fully-redacted artifact and no later
+        enabled recorder can make that untrue.
+
+    Ordering of severity (monotonic latch): UNKNOWN < ENABLED < DISABLED.
+    """
+
+    UNKNOWN = "unknown"
+    ENABLED = "enabled"
+    DISABLED = "disabled"
+
+    def latch(self, observed_disabled: bool) -> RedactionState:
+        """Fold one record's observed redaction state in, monotonically.
+
+        DISABLED is absorbing. From UNKNOWN/ENABLED, an enabled write reaches
+        ENABLED and a disabled write reaches DISABLED. The state only ever moves
+        UNKNOWN -> ENABLED -> DISABLED, never back.
+        """
+        if self is RedactionState.DISABLED or observed_disabled:
+            return RedactionState.DISABLED
+        return RedactionState.ENABLED
 
 
 @dataclass
@@ -57,9 +96,28 @@ class Manifest:
     pubkey_pem: str | None = None
     chains: dict[str, ChainState] = field(default_factory=dict)
     files: dict[str, FileChecksum] = field(default_factory=dict)
-    # Self-audit checklist item #12: a disabled redactor must surface in the
-    # manifest so audit-time inspection catches it. NEVER silently off.
-    redaction_disabled: bool = False
+    # Self-audit checklist item #12: the redaction state must surface in the
+    # manifest so audit-time inspection catches a disabled redactor. Tri-state
+    # (see RedactionState): DISABLED latches, and absence reads UNKNOWN — NEVER
+    # a silent affirmative "enabled". The recorder DRIVES this per record via
+    # LocalFileSink.note_redaction_disabled; it is no longer a disconnected,
+    # manually-set constructor flag (that disconnection was the leak).
+    redaction_state: RedactionState = RedactionState.UNKNOWN
+
+    @property
+    def redaction_disabled(self) -> bool:
+        """Backward-compatible boolean view: True only when DISABLED is latched.
+
+        UNKNOWN and ENABLED both read False here, but they are NOT the same — a
+        reader that must distinguish "confirmed enabled" from "never attested"
+        reads `redaction_state`. This accessor exists so older callers keep
+        working, not as the honest surface.
+        """
+        return self.redaction_state is RedactionState.DISABLED
+
+    def note_redaction_disabled(self, observed_disabled: bool) -> None:
+        """Fold one record's observed redaction state into the latch."""
+        self.redaction_state = self.redaction_state.latch(observed_disabled)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -68,7 +126,7 @@ class Manifest:
             "pubkey_pem": self.pubkey_pem,
             "chains": {k: asdict(v) for k, v in self.chains.items()},
             "files": {k: asdict(v) for k, v in self.files.items()},
-            "redaction_disabled": self.redaction_disabled,
+            "redaction_state": self.redaction_state.value,
         }
 
     @classmethod
@@ -89,8 +147,28 @@ class Manifest:
             files={
                 k: FileChecksum(**v) for k, v in data.get("files", {}).items()
             },
-            redaction_disabled=bool(data.get("redaction_disabled", False)),
+            redaction_state=cls._read_redaction_state(data),
         )
+
+    @staticmethod
+    def _read_redaction_state(data: dict[str, Any]) -> RedactionState:
+        """Read the redaction state, honestly bridging the pre-v1.2 boolean.
+
+        - A v1.2 manifest carries `redaction_state` — use it verbatim.
+        - A pre-v1.2 manifest carries only the old `redaction_disabled` bool.
+          `true` still means DISABLED (that WAS observed). But `false` on an old
+          manifest is the disconnected default — it does NOT attest ENABLED, so
+          it reads UNKNOWN. Absence of either field reads UNKNOWN.
+        """
+        raw = data.get("redaction_state")
+        if isinstance(raw, str):
+            try:
+                return RedactionState(raw)
+            except ValueError:
+                return RedactionState.UNKNOWN
+        if data.get("redaction_disabled") is True:
+            return RedactionState.DISABLED
+        return RedactionState.UNKNOWN
 
     @classmethod
     def load_or_create(cls, path: Path) -> Manifest:
@@ -108,27 +186,51 @@ class Manifest:
         return cls()
 
     def save_atomic(self, path: Path) -> None:
-        """Write manifest atomically: write .tmp, fsync, rename, fsync dir.
+        """Write manifest atomically: write a private temp file, fsync, rename.
 
         On POSIX, rename is atomic — if the process is killed mid-rename, the
         target either still has the old content or has the new content, never
         a partial write.
+
+        The temp file MUST be unique per writer, which is why this uses
+        `mkstemp` rather than a derived name like `manifest.json.tmp`. With a
+        fixed temp path, two concurrent writers share one temp file: A truncates
+        it while B is still writing (so A's `os.replace` can publish B's
+        half-written bytes), and whichever writer replaces first removes the temp
+        file out from under the other, whose own `os.replace` then raises
+        FileNotFoundError. In LocalFileSink that surfaces as a SinkError — which
+        is how a manifest race turns into a crashed tool call. `mkstemp` also
+        creates with O_EXCL, so it cannot collide with an existing file.
+
+        Uniqueness makes the *temp file* private to one writer; it does not order
+        the *renames*. Concurrent writers still race to publish and last-writer-
+        wins, which is fine here — every writer publishes a complete, self-
+        consistent manifest, and LocalFileSink serialises its own writes anyway
+        so the last one to land is the newest. What is no longer possible is a
+        torn manifest or a spurious failure.
         """
-        tmp = path.with_suffix(path.suffix + ".tmp")
         text = json.dumps(self.to_dict(), indent=2, sort_keys=True)
 
-        fd = os.open(
-            str(tmp),
-            os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
-            0o600,
+        fd, tmp_name = tempfile.mkstemp(
+            dir=str(path.parent), prefix=f"{path.name}.", suffix=".tmp"
         )
+        tmp = Path(tmp_name)
         try:
-            os.write(fd, text.encode("utf-8"))
-            os.fsync(fd)
-        finally:
-            os.close(fd)
+            try:
+                os.fchmod(fd, 0o600)
+                os.write(fd, text.encode("utf-8"))
+                os.fsync(fd)
+            finally:
+                os.close(fd)
 
-        os.replace(tmp, path)
+            os.replace(tmp, path)
+        except BaseException:
+            # Never leave a temp file behind on a failed save — a directory
+            # slowly filling with `manifest.json.*.tmp` is its own incident, and
+            # ENOSPC (the error most likely to land here) would be made worse by
+            # the debris of every previous attempt.
+            tmp.unlink(missing_ok=True)
+            raise
 
         # fsync the directory so the rename is durable.
         dir_fd = os.open(str(path.parent), os.O_RDONLY)
@@ -143,4 +245,5 @@ __all__ = [
     "ChainState",
     "FileChecksum",
     "Manifest",
+    "RedactionState",
 ]

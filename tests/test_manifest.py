@@ -12,6 +12,7 @@ from agent_audit.manifest import (
     ChainState,
     FileChecksum,
     Manifest,
+    RedactionState,
 )
 
 
@@ -39,11 +40,14 @@ def test_manifest_round_trip_via_dict() -> None:
                 sha256="cc" * 32, record_count=10, first_record_id="x", last_record_id="y"
             )
         },
-        redaction_disabled=False,
+        redaction_state=RedactionState.DISABLED,
     )
 
     restored = Manifest.from_dict(m.to_dict())
     assert restored == m
+    # The tri-state survives the round trip, and the compat accessor agrees.
+    assert restored.redaction_state == RedactionState.DISABLED
+    assert restored.redaction_disabled is True
 
 
 def test_manifest_load_or_create_returns_fresh_when_absent(tmp_path: Path) -> None:

@@ -3,7 +3,7 @@
 Covers:
 - _extract_session_id: caller override beats SDK-supplied; SDK value used otherwise; default fallback when both missing
 - _extract_step_id: uses tool_use_id from input; falls back to UUIDv7 when missing
-- _coerce_to_json: non-serialisable objects survive via str() default
+- raw tool_input/tool_response are handed to the recorder; its normalize pass marks hostile values
 - AuditHook.__call__ on a PostToolUse input emits a signed record
 - The emitted record carries the SDK session_id, tool_use_id as step_id, tool_name, tool_input, tool_response
 - Non-PostToolUse events are silently no-op'd (defensive)
@@ -19,12 +19,11 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from agent_audit.adapters.claude_agent_sdk import (
     AuditHook,
-    _coerce_to_json,
     _extract_session_id,
     _extract_step_id,
 )
 from agent_audit.emit import AuditRecorder
-from agent_audit.integrity import verify_record
+from agent_audit.integrity import compute_chain_link, verify_record
 from agent_audit.keys import SigningKey, compute_key_id
 from agent_audit.sinks.base import InMemorySink
 
@@ -104,15 +103,6 @@ def test_extract_step_id_falls_back_to_uuid7() -> None:
     result = _extract_step_id(hook_input)
     # UUIDv7 string is 36 chars with the canonical hyphen layout
     assert len(result) == 36 and result.count("-") == 4
-
-
-def test_coerce_to_json_drops_non_serialisable() -> None:
-    class Opaque:
-        def __repr__(self) -> str:
-            return "<Opaque>"
-
-    payload = {"k": Opaque(), "n": 1}
-    assert _coerce_to_json(payload) == {"k": "<Opaque>", "n": 1}
 
 
 # ---------------------------------------------------------------------------
@@ -212,3 +202,373 @@ async def test_chain_of_two_records(
     pubkey_by_id = {signing_key.key_id: signing_key.public_key}
     for rec in (first, second):
         assert verify_record(rec, pubkey_by_id).is_valid
+
+
+# ---------------------------------------------------------------------------
+# PostToolUseFailure
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_post_tool_use_failure_records_error(
+    recorder: AuditRecorder, sink: InMemorySink
+) -> None:
+    hook = AuditHook(recorder=recorder, session_id="cas")
+    await hook(
+        hook_input={
+            "hook_event_name": "PostToolUseFailure",
+            "tool_name": "Bash",
+            "tool_input": {"command": "false"},
+            "tool_use_id": "tu-1",
+            "error": "command exited with status 1",
+        },
+        tool_use_id="tu-1",
+        context={},
+    )
+    outcome = sink.records[-1]["payload"]["outcome"]
+    assert outcome["kind"] == "error"
+    assert outcome["error_type"] == "ToolFailure"
+    assert outcome["message"] == "command exited with status 1"
+    assert sink.records[-1]["payload"]["output"]["body"] is None
+
+
+@pytest.mark.asyncio
+async def test_interrupt_is_labelled_distinctly(
+    recorder: AuditRecorder, sink: InMemorySink
+) -> None:
+    hook = AuditHook(recorder=recorder, session_id="cas")
+    await hook(
+        hook_input={
+            "hook_event_name": "PostToolUseFailure",
+            "tool_name": "Bash",
+            "tool_input": {"command": "sleep 999"},
+            "tool_use_id": "tu-2",
+            "error": "interrupted by user",
+            "is_interrupt": True,
+        },
+        tool_use_id="tu-2",
+        context={},
+    )
+    assert sink.records[-1]["payload"]["outcome"]["error_type"] == "Interrupt"
+
+
+@pytest.mark.asyncio
+async def test_post_tool_use_still_records_success(
+    recorder: AuditRecorder, sink: InMemorySink
+) -> None:
+    hook = AuditHook(recorder=recorder, session_id="cas")
+    await hook(
+        hook_input={
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "/tmp/x"},
+            "tool_response": "contents",
+            "tool_use_id": "tu-3",
+        },
+        tool_use_id="tu-3",
+        context={},
+    )
+    assert sink.records[-1]["payload"]["outcome"] == {"kind": "success"}
+
+
+# ---------------------------------------------------------------------------
+# User DENIAL at the permission prompt → outcome=denied + a truthful Gate(DENY)
+#
+# The SDK drives the same binary as the CLI, so a user rejection arrives as a
+# PostToolUseFailure whose `error` begins with the same rejection lead-sentence
+# (probed verbatim from CLI 2.1.207). The denial mapping routes through the SAME
+# shared predicate the CLI adapter uses (adapters/_claude_hooks) so the two
+# cannot drift.
+# ---------------------------------------------------------------------------
+
+
+_SDK_DENIAL_ERROR = (
+    "The user doesn't want to proceed with this tool use. The tool use was "
+    "rejected (eg. if it was a file edit, the new_string was NOT written to the "
+    "file). To tell you how to proceed, the user said: no thanks"
+)
+
+
+@pytest.mark.asyncio
+async def test_user_denial_records_denied_with_gate(
+    recorder: AuditRecorder, sink: InMemorySink, signing_key: SigningKey
+) -> None:
+    """A user denial → outcome=denied + Gate(DENY) with matching policy_id and
+    output.body=None. Not error(Interrupt). Signs and verifies."""
+    from agent_audit.adapters._claude_hooks import PERMISSION_DENIED_POLICY_ID
+
+    hook = AuditHook(recorder=recorder, session_id="cas")
+    await hook(
+        hook_input={
+            "hook_event_name": "PostToolUseFailure",
+            "tool_name": "Bash",
+            "tool_input": {"command": "rm -rf ./build"},
+            "tool_use_id": "tu-deny",
+            "error": _SDK_DENIAL_ERROR,
+            "is_interrupt": True,
+        },
+        tool_use_id="tu-deny",
+        context={},
+    )
+    record = sink.records[-1]
+    outcome = record["payload"]["outcome"]
+    policy = record["payload"]["policy"]
+
+    assert outcome["kind"] == "denied"
+    assert outcome["policy_id"] == PERMISSION_DENIED_POLICY_ID
+    assert policy["kind"] == "gate"
+    assert policy["decision"] == "deny"
+    assert policy["policy_id"] == PERMISSION_DENIED_POLICY_ID
+    assert policy["approver"] is None
+    assert policy["evaluation_ms"] is None
+    assert record["payload"]["output"]["body"] is None
+
+    pubkey_by_id = {signing_key.key_id: signing_key.public_key}
+    assert verify_record(record, pubkey_by_id).is_valid
+
+
+@pytest.mark.asyncio
+async def test_genuine_failure_is_not_denied(
+    recorder: AuditRecorder, sink: InMemorySink
+) -> None:
+    """The predicate does not over-match: a genuine `Exit code 1` stays error."""
+    hook = AuditHook(recorder=recorder, session_id="cas")
+    await hook(
+        hook_input={
+            "hook_event_name": "PostToolUseFailure",
+            "tool_name": "Bash",
+            "tool_input": {"command": "false"},
+            "tool_use_id": "tu-f",
+            "error": "Exit code 1",
+        },
+        tool_use_id="tu-f",
+        context={},
+    )
+    outcome = sink.records[-1]["payload"]["outcome"]
+    assert outcome["kind"] == "error"
+    assert outcome["kind"] != "denied"
+    assert sink.records[-1]["payload"]["policy"]["kind"] == "policy_unobserved"
+
+
+# ---------------------------------------------------------------------------
+# Backgrounded Bash calls — the SDK drives the same binary as the CLI, and it
+# has no timeout failure signal either.
+#
+# The payload below is a verbatim capture from claude-agent-sdk 0.2.118. A Bash
+# call that exceeds its `timeout` does NOT fire PostToolUseFailure. The runtime
+# moves the command to the background and fires an ordinary PostToolUse — the
+# SUCCESS slot — with no `error` key, `interrupted: false`, empty stdout, and a
+# `backgroundTaskId`. Same shape the Claude Code CLI produces, because it is the
+# same runtime underneath.
+#
+# Signing that as `success` attests that a call succeeded when nobody observed
+# whether it did. The discriminator (a `backgroundTaskId` the caller never asked
+# for) lives in adapters/_claude_hooks.py and is shared with the CLI adapter, so
+# the two cannot drift.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_runtime_backgrounded_timeout_is_unobserved_not_success(
+    recorder: AuditRecorder, sink: InMemorySink
+) -> None:
+    """THE BUG. Verbatim payload from claude-agent-sdk 0.2.118: a Bash command
+    that blew its timeout arrives on PostToolUse and was signed as `success`.
+    The command may still be running, may fail later, may never finish — the
+    hook cannot tell. `unobserved` is the only honest record."""
+    hook = AuditHook(recorder=recorder, session_id="cas")
+    await hook(
+        hook_input={
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": "python3 -c 'import time; time.sleep(60)'",
+                "timeout": 3000,
+            },
+            "tool_response": {
+                "stdout": "",
+                "stderr": "",
+                "interrupted": False,
+                "backgroundTaskId": "bnopr5ak5",
+            },
+            "tool_use_id": "tu-bg",
+            "duration_ms": 3750,
+        },
+        tool_use_id="tu-bg",
+        context={},
+    )
+    outcome = sink.records[-1]["payload"]["outcome"]
+    assert outcome["kind"] == "unobserved"
+    assert outcome["reason"] == "no_failure_signal"
+    # Not success, and not a synthesized timeout — the runtime never reported one.
+    assert outcome["kind"] != "success"
+    assert outcome["kind"] != "timeout"
+
+    # The thin tool_response is still evidence: backgroundTaskId names the task
+    # that inherited the work and is the only thread an investigator can pull.
+    body = sink.records[-1]["payload"]["output"]["body"]
+    assert body["backgroundTaskId"] == "bnopr5ak5"
+
+
+@pytest.mark.asyncio
+async def test_intentional_background_stays_success(
+    recorder: AuditRecorder, sink: InMemorySink
+) -> None:
+    """The caller asked for `run_in_background: true`. That call genuinely
+    succeeded — the tool was asked to launch a process and it launched one.
+    Relabelling it `unobserved` would destroy good evidence, which is why
+    `backgroundTaskId` alone cannot be the discriminator."""
+    hook = AuditHook(recorder=recorder, session_id="cas")
+    await hook(
+        hook_input={
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": "python3 -c 'import time; time.sleep(60)'",
+                "run_in_background": True,
+            },
+            "tool_response": {
+                "stdout": "",
+                "stderr": "",
+                "interrupted": False,
+                "backgroundTaskId": "b2twld3af",
+            },
+            "tool_use_id": "tu-bg2",
+        },
+        tool_use_id="tu-bg2",
+        context={},
+    )
+    assert sink.records[-1]["payload"]["outcome"] == {"kind": "success"}
+    body = sink.records[-1]["payload"]["output"]["body"]
+    assert body["backgroundTaskId"] == "b2twld3af"
+
+
+@pytest.mark.asyncio
+async def test_ordinary_bash_call_has_no_background_task_and_stays_success(
+    recorder: AuditRecorder, sink: InMemorySink
+) -> None:
+    """Control: a fast command carries no `backgroundTaskId` at all."""
+    hook = AuditHook(recorder=recorder, session_id="cas")
+    await hook(
+        hook_input={
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "echo control-probe"},
+            "tool_response": {
+                "stdout": "control-probe",
+                "stderr": "",
+                "interrupted": False,
+            },
+            "tool_use_id": "tu-bg3",
+        },
+        tool_use_id="tu-bg3",
+        context={},
+    )
+    assert sink.records[-1]["payload"]["outcome"] == {"kind": "success"}
+
+
+@pytest.mark.asyncio
+async def test_background_detection_does_not_touch_non_bash_tools(
+    recorder: AuditRecorder, sink: InMemorySink
+) -> None:
+    """A non-Bash tool whose output merely mentions `backgroundTaskId` is not a
+    backgrounded Bash call. The discriminator reads the runtime's structural
+    field on the Bash tool, not any dict key anywhere."""
+    hook = AuditHook(recorder=recorder, session_id="cas")
+    await hook(
+        hook_input={
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "/tmp/notes.md"},
+            "tool_response": "the runtime sets backgroundTaskId when it backgrounds a task",
+            "tool_use_id": "tu-bg4",
+        },
+        tool_use_id="tu-bg4",
+        context={},
+    )
+    assert sink.records[-1]["payload"]["outcome"] == {"kind": "success"}
+
+
+@pytest.mark.asyncio
+async def test_unobserved_record_is_signed_and_chained(
+    recorder: AuditRecorder, sink: InMemorySink, signing_key: SigningKey
+) -> None:
+    """An unobserved record is a first-class link: signed, verifiable, chained.
+    An outcome nobody could observe is still evidence that the call happened."""
+    hook = AuditHook(recorder=recorder, session_id="cas")
+    await hook(
+        hook_input=_post_tool_use_input(tool_use_id="tu-a", tool_name="Read"),
+        tool_use_id="tu-a",
+        context={},
+    )
+    await hook(
+        hook_input={
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "sleep 60", "timeout": 3000},
+            "tool_response": {"stdout": "", "backgroundTaskId": "bnopr5ak5"},
+            "tool_use_id": "tu-b",
+        },
+        tool_use_id="tu-b",
+        context={},
+    )
+
+    backgrounded = sink.records[-1]
+    assert backgrounded["payload"]["outcome"]["kind"] == "unobserved"
+    assert backgrounded["envelope"]["prev_hash"] == compute_chain_link(sink.records[-2])
+
+    keyring = {signing_key.key_id: signing_key.public_key}
+    assert verify_record(backgrounded, keyring).is_valid
+
+
+# ---------------------------------------------------------------------------
+# An INTERRUPTED tool call must never be signed as `success` — SDK side.
+#
+# The rule lives in adapters/_claude_hooks.py and is shared with the Claude Code
+# CLI adapter, for the same reason the background discriminator is: same runtime,
+# byte-identical payloads, and two adapters that have already drifted once.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_interrupted_tool_response_is_unobserved_not_success(
+    recorder: AuditRecorder, sink: InMemorySink
+) -> None:
+    hook = AuditHook(recorder=recorder, session_id="cas")
+    await hook(
+        hook_input={
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "rm -rf ./build"},
+            "tool_response": {"stdout": "", "stderr": "", "interrupted": True},
+            "tool_use_id": "tu-int",
+        },
+        tool_use_id="tu-int",
+        context={},
+    )
+    outcome = sink.records[-1]["payload"]["outcome"]
+    assert outcome["kind"] == "unobserved", (
+        "signed a success for a tool call that was interrupted mid-flight"
+    )
+    assert outcome["reason"] == "no_failure_signal"
+    assert outcome["kind"] != "success"
+
+
+@pytest.mark.asyncio
+async def test_interrupted_false_stays_success(
+    recorder: AuditRecorder, sink: InMemorySink
+) -> None:
+    """Control: an ordinary completed call carries `interrupted: false`."""
+    hook = AuditHook(recorder=recorder, session_id="cas")
+    await hook(
+        hook_input={
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "echo ok"},
+            "tool_response": {"stdout": "ok", "stderr": "", "interrupted": False},
+            "tool_use_id": "tu-int2",
+        },
+        tool_use_id="tu-int2",
+        context={},
+    )
+    assert sink.records[-1]["payload"]["outcome"] == {"kind": "success"}

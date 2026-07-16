@@ -1,6 +1,7 @@
 """Shared fixtures for the benchmark suite.
 
-These benches measure the v0.1 hot path: sign + chain + canonicalise + write.
+These benches measure the current hot path: enter the commit section (_ChainLock)
+-> redact -> normalize -> build -> sign -> chain -> sink write.
 They are intentionally separate from `tests/` and not collected by the default
 `pytest` run (see `testpaths` in pyproject.toml). Run with:
 
@@ -18,8 +19,29 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from agent_audit.emit import AuditRecorder
 from agent_audit.keys import SigningKey, compute_key_id
+from agent_audit.schema.v1 import (
+    OutcomeContext,
+    PolicyContext,
+    PolicyUnobservedReason,
+    policy_unobserved,
+    success,
+)
 from agent_audit.sinks.base import InMemorySink
 from agent_audit.sinks.local_file import LocalFileSink
+
+# The bench models a plain successful tool call with no gate mechanism in front
+# of it. Both fields are REQUIRED by `record()` and both are positive assertions,
+# so the bench states only what the harness actually observes:
+#
+#   - outcome: the harness calls no real tool; it constructs the success itself,
+#     so `success()` is observed, not assumed.
+#   - policy: there is no gate engine in the bench at all. The old
+#     `ungated(AUTO_ALLOWED_LOW_RISK)` asserted BOTH "no gate fired" AND "low
+#     risk" — neither of which this harness observes. `policy_unobserved` is the
+#     honest floor. It carries the same per-record cost through redact /
+#     normalize / JCS, so nothing measured is weakened by the swap.
+BENCH_POLICY: PolicyContext = policy_unobserved(PolicyUnobservedReason.NO_GATE_SIGNAL)
+BENCH_OUTCOME: OutcomeContext = success()
 
 
 @pytest.fixture(scope="session")
@@ -93,13 +115,18 @@ def recorder_local_file(
 
 
 @pytest.fixture(scope="session")
-def prepopulated_jsonl(
+def prepopulated_dir(
     tmp_path_factory: pytest.TempPathFactory, signing_key: SigningKey
 ) -> Path:
-    """A 10 000-record JSONL file for verifier benchmarks.
+    """A 10 000-record audit DIRECTORY (JSONL + manifest) for verifier benches.
 
     Built once per session. Each record is ~2KB so the file approximates
     a typical day's audit volume on a medium-traffic agent fleet.
+
+    Returns the directory, not the file, because the auditor-facing entry point
+    (`verify_tree`) takes a directory: it cross-checks the manifest and digests
+    each file. `prepopulated_jsonl` narrows this to the single log file for the
+    per-record bench.
     """
     out_dir = tmp_path_factory.mktemp("verifier_corpus")
     sink = LocalFileSink(dir=out_dir)
@@ -107,7 +134,7 @@ def prepopulated_jsonl(
 
     payload = _input_payload(2048)
 
-    from agent_audit.schema.v1 import NoGateReason, Output, ToolCall, ungated
+    from agent_audit.schema.v1 import Output, ToolCall
 
     async def populate() -> None:
         for i in range(10_000):
@@ -117,7 +144,8 @@ def prepopulated_jsonl(
                 tool=ToolCall(name="bench_tool"),
                 input=payload,
                 output=Output(body={"ok": True, "row_count": 42}),
-                policy=ungated(NoGateReason.AUTO_ALLOWED_LOW_RISK),
+                policy=BENCH_POLICY,
+                outcome=BENCH_OUTCOME,
             )
         await sink.close()
 
@@ -127,7 +155,15 @@ def prepopulated_jsonl(
     finally:
         loop.close()
 
-    jsonl_files = sorted(out_dir.glob("audit-*.jsonl"))
+    if not sorted(out_dir.glob("audit-*.jsonl")):
+        raise RuntimeError("verifier corpus generation produced no JSONL file")
+    return out_dir
+
+
+@pytest.fixture(scope="session")
+def prepopulated_jsonl(prepopulated_dir: Path) -> Path:
+    """The single JSONL log file inside the session corpus directory."""
+    jsonl_files = sorted(prepopulated_dir.glob("audit-*.jsonl"))
     if not jsonl_files:
         raise RuntimeError("verifier corpus generation produced no JSONL file")
     return jsonl_files[0]

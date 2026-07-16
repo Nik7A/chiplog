@@ -19,7 +19,9 @@ import asyncio
 import pytest
 
 from agent_audit.emit import AuditRecorder
-from agent_audit.schema.v1 import NoGateReason, Output, ToolCall, ungated
+from agent_audit.schema.v1 import Output, ToolCall
+
+from conftest import BENCH_OUTCOME, BENCH_POLICY
 
 ITERATIONS_PER_ROUND = 100
 ROUNDS = 20
@@ -38,7 +40,8 @@ def _bench_records(
                 tool=ToolCall(name="bench_tool"),
                 input=sample_input,
                 output=Output(body={"ok": True}),
-                policy=ungated(NoGateReason.AUTO_ALLOWED_LOW_RISK),
+                policy=BENCH_POLICY,
+                outcome=BENCH_OUTCOME,
             )
 
     loop.run_until_complete(write_batch())
