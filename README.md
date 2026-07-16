@@ -2,7 +2,7 @@
 
 *Your AI agent acts on its own. Now you can prove what it did.*
 
-Cryptographically-linked records of AI agent tool calls. A foundation for SOC 2 / ISO 42001 / EU AI Act Article 12 evidence — v0.1 is dogfooding-grade, v0.2 is the regulatory hardening.
+Cryptographically-linked records of AI agent tool calls. A foundation for SOC 2 / ISO 42001 / EU AI Act Article 12 evidence — dogfooding-grade today, with the regulatory hardening still ahead of it.
 
 **Status:** developer preview, no external users. Dogfooded against the author's own daemon-driven Claude Code agent system from 2026-06-22 to 2026-07-01 (19,037 signed records) and against a LangGraph multi-agent system — which is how most of the defects v0.2 fixes were found. Read [SCOPE_STATEMENT.md](SCOPE_STATEMENT.md) and the limits below before opening an issue.
 
@@ -31,18 +31,18 @@ The signing spec lives in [SIGNING.md](SIGNING.md) with one worked test vector s
 
 - **Not an observability product.** If you want span-level tracing, eval harnesses, or token cost graphs, use LangSmith, Langfuse, or Datadog Agent Observability. Those produce dashboards. This produces records.
 - **Not a GRC platform.** Vanta, Drata, and friends map controls to frameworks. chiplog produces an artifact those controls can cite. They live upstream of this.
-- **Not a SOC 2 magic button.** Your auditor still decides what's acceptable. v0.1 makes the conversation easier; v0.2 is what survives it.
+- **Not a SOC 2 magic button.** Your auditor still decides what's acceptable. What ships today makes the conversation easier; surviving it needs the hardening in [ROADMAP.md](ROADMAP.md).
 - **Not a coverage of:** model provenance, training data lineage, eval evidence, prompt change management, vendor risk, IR runbooks, DPIA, HITL SOPs, model cards, fairness. See [SCOPE_STATEMENT.md](SCOPE_STATEMENT.md). chiplog covers one control area.
 
-## v0.1 — what's honest about it
+## What's honest about it
 
-v0.1 has three known limits that disqualify it as primary external-audit evidence today. The fixes are tracked in [ROADMAP.md](ROADMAP.md).
+Three known limits disqualify this as primary external-audit evidence today. v0.2 closed none of them; the fixes are tracked in [ROADMAP.md](ROADMAP.md).
 
 1. **Signing key co-located with the agent process.** A compromised agent can sign forged records.
 2. **Writer controls the sink.** LocalFileSink runs in-process with the agent.
 3. **No external anchor for the chain head.** A forward-only chain detects tampering but not silent removal of the most recent records.
 
-The recorder prints a `DEV_MODE` banner to stderr on every startup so this is impossible to forget. The verifier report ends with an explicit NON-CLAIMS block. Read [SCOPE_STATEMENT.md](SCOPE_STATEMENT.md) before staking a compliance claim on v0.1.
+The recorder prints a `DEV_MODE` banner to stderr on every startup so this is impossible to forget. The verifier report ends with an explicit NON-CLAIMS block. Read [SCOPE_STATEMENT.md](SCOPE_STATEMENT.md) before staking a compliance claim on it.
 
 ## What it captures per tool call
 
@@ -67,11 +67,11 @@ A log you can silently edit has zero evidentiary value. With chain + signature, 
 - No record was modified (any byte flip surfaces at the next record's `prev_hash`)
 - Records came from the holder of the signing key, not someone else's process
 
-What v0.1 alone does NOT prove (NON-CLAIMS, repeated in every verify report):
+What the chain and signature alone do NOT prove (NON-CLAIMS, repeated in every verify report):
 
-- Records were not deleted from the head of the chain → fixed in v0.2 by external anchor
-- The signing key was not compromised → fixed in v0.2 by sidecar signer
-- The wall clock was correct → fixed in v0.2 by RFC 3161 TSA
+- Records were not deleted from the head of the chain → needs the external anchor, still roadmap
+- The signing key was not compromised → needs the sidecar signer, still roadmap
+- The wall clock was correct → needs an RFC 3161 TSA, still roadmap
 
 ## Supported runtimes
 
@@ -81,10 +81,10 @@ What v0.1 alone does NOT prove (NON-CLAIMS, repeated in every verify report):
 | Claude Code CLI | Supported | `chiplog hook-record` under **both** `PostToolUse` and `PostToolUseFailure` |
 | LangChain / LangGraph (1.x) | Supported | `AuditMiddleware` plus `@audited_tool` decorator |
 | OpenAI Agents SDK | Supported | `@audited_tool` decorator (the audit-grade path, `from chiplog import audited_tool`); `AuditHooks(RunHooks)` records `unobserved` only |
-| CrewAI | Stub planned for v0.2 | Crew/Task event hooks via `@audited_tool` on tools |
-| LlamaIndex (Workflows + Agents) | Stub planned for v0.2 | Workflow step events and `@audited_tool` on tools |
+| CrewAI | Gated on design-partner demand | Crew/Task event hooks via `@audited_tool` on tools |
+| LlamaIndex (Workflows + Agents) | Gated on design-partner demand | Workflow step events and `@audited_tool` on tools |
 | Claude Agent SDK (Python) | Supported | `AuditHook` under **both** `PostToolUse` and `PostToolUseFailure` in `ClaudeAgentOptions.hooks` |
-| Pydantic-AI | Stub planned for v0.2 | Agent run and tool-call hooks |
+| Pydantic-AI | Gated on design-partner demand | Agent run and tool-call hooks |
 | Vercel AI SDK | Not planned | TypeScript-only ecosystem; this library is Python. A separate Node port may be evaluated later. |
 | Mastra | Not planned | TypeScript-only ecosystem; this library is Python. A separate Node port may be evaluated later. |
 | n8n / Make / Zapier | Not planned | Workflow orchestrators, not tool-call runtimes; auditing belongs at the workflow-platform layer rather than inside this library. |
@@ -266,7 +266,7 @@ agent = Agent(name="support", tools=[lookup_customer])
 
 ## Sinks
 
-v0.1 ships `LocalFileSink` — daily-rotated JSONL with `fsync`/`F_FULLFSYNC` and a sidecar `manifest.json` written atomically (tmp + fsync + rename + fsync dir). Pluggable via the `Sink` protocol — write your own in ~20 lines. Additional sinks (S3 Object Lock, Postgres with role separation, MultiSink fan-out) are tracked in [ROADMAP.md](ROADMAP.md).
+`LocalFileSink` is the only sink shipping today — daily-rotated JSONL with `fsync`/`F_FULLFSYNC` and a sidecar `manifest.json` written atomically (tmp + fsync + rename + fsync dir). Pluggable via the `Sink` protocol — write your own in ~20 lines. Additional sinks (S3 Object Lock, Postgres with role separation, MultiSink fan-out) are tracked in [ROADMAP.md](ROADMAP.md).
 
 ## Performance
 
@@ -290,7 +290,7 @@ I spent 8 years at a Munich B2B SaaS (customers included VW, Deutsche Bahn, Comm
 
 EU AI Act Article 12 requires automatic event logging for high-risk AI systems. The text is settled (Articles 19/26 set a 6-month minimum retention); the technical standard family (prEN 18229-1, prEN ISO/IEC 24970) is still in draft as of 2026 Q2. SOC 2 audits are starting to ask about AI controls.
 
-This library is the foundation I wanted to build before I shipped that conversation. v0.1 is honest about its scope. v0.2 is what closes the production gap.
+This library is the foundation I wanted to build before I shipped that conversation. It is honest about its scope, and the production gap is still open — see [ROADMAP.md](ROADMAP.md).
 
 ## Roadmap and design partner
 
