@@ -29,11 +29,12 @@ from agent_audit.cli import (
     EXIT_OK,
     EXIT_SIGNATURE_FAIL,
     cli,
+    cmd_inspect,
 )
 from agent_audit.emit import AuditRecorder
 from agent_audit.keys import SigningKey, compute_key_id
 from agent_audit.report import format_json_report, format_text_report
-from agent_audit.schema.v1 import NoGateReason, Output, ToolCall, ungated
+from agent_audit.schema.v1 import NoGateReason, Output, ToolCall, success, ungated
 from agent_audit.sinks.local_file import LocalFileSink
 from agent_audit.verify import ChainCheckOutcome, verify_log
 
@@ -68,6 +69,7 @@ async def _emit_n_clean_records(tmp_path: Path, sk: SigningKey, n: int) -> Path:
             input={"i": i},
             output=Output(body=""),
             policy=ungated(NoGateReason.AUTO_ALLOWED_LOW_RISK),
+            outcome=success(),
         )
     return next(sink_dir.glob("audit-*.jsonl"))
 
@@ -392,3 +394,36 @@ async def test_cli_verify_clean_log_under_10ms(
     elapsed = _time.perf_counter() - t0
     assert result.exit_code == EXIT_OK
     assert elapsed < 0.2
+
+
+def test_inspect_shows_outcome_column(tmp_path, capsys) -> None:  # type: ignore[no-untyped-def]
+    log = tmp_path / "audit.jsonl"
+    log.write_text(
+        json.dumps({
+            "envelope": {"chain_id": "c1"},
+            "header": {"step_id": "s1"},
+            "payload": {
+                "tool": {"name": "read_file"},
+                "policy": {"kind": "none"},
+                "outcome": {"kind": "error", "error_type": "IOError", "message": "x"},
+            },
+        }) + "\n",
+        encoding="utf-8",
+    )
+    cmd_inspect(log, head=10)
+    assert "outcome=error" in capsys.readouterr().out
+
+
+def test_inspect_shows_question_mark_for_v1_0_records(tmp_path, capsys) -> None:  # type: ignore[no-untyped-def]
+    """Records written before payload.outcome existed must still inspect cleanly."""
+    log = tmp_path / "audit.jsonl"
+    log.write_text(
+        json.dumps({
+            "envelope": {"chain_id": "c1"},
+            "header": {"step_id": "s1"},
+            "payload": {"tool": {"name": "read_file"}, "policy": {"kind": "none"}},
+        }) + "\n",
+        encoding="utf-8",
+    )
+    cmd_inspect(log, head=10)
+    assert "outcome=?" in capsys.readouterr().out

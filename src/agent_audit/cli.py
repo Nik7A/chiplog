@@ -8,6 +8,36 @@ Exit codes are STABLE and documented in SIGNING.md:
   4 — malformed JSONL (parse error or schema mismatch)
   5 — empty log
 
+v0.2 adds three codes for conditions that only arise in directory / manifest
+verification (a single file cannot exhibit them, so codes 0–5 keep their exact
+meanings):
+  6 — partial verification (>=1 attested record verified, >=1 unverifiable for
+      want of a key). If NOTHING verified, that is code 3, not 6.
+  7 — off-canonical records present (records that do not chain onto the path the
+      manifest attests). Non-zero by design: an auditor must never read exit 0
+      over a log containing records that don't chain.
+  8 — manifest pubkey_id is stale (disagrees with the key material it stores).
+  9 — manifest-integrity break: the log disagrees with its own manifest anchor —
+      the per-chain record_count, or a per-file sha256 / record_count. Injecting
+      or duplicating a record, or a lie in the manifest's count, lands here.
+ 10 — redaction-forgery break: a validly-signed record carries a tool-forged
+      redaction marker / redacted-key sentinel (no backing entry, or a token that
+      does not match the record's). The signature is genuine but the "evidence of
+      redaction" is fabricated; redaction_authenticity() surfaces it. Applies to
+      both single-file and directory verification.
+
+When several conditions hold at once, the exit code is the most integrity-
+critical one (precedence: 2 > 1 > 10 > 9 > 4 > 7 > 8 > 6 > 3 > 5 > 0); the full
+report still enumerates every finding.
+
+Note on directory mode with an absent/corrupt manifest: verification DEGRADES to
+log-only and returns exit 0 (the records present verify and chain), the SAME code
+as a full manifest-anchored pass. That is deliberate for backward compatibility,
+but it means exit code alone cannot distinguish the two. A CI that needs full
+manifest-anchored assurance MUST also assert `manifest_present == true` (JSON) or
+reject the "LOG-ONLY PASS" verdict (text) — in log-only mode, tail- and
+whole-chain deletion are undetectable.
+
 CI integrations and audit scripts depend on these — do not renumber.
 """
 
@@ -25,8 +55,13 @@ from agent_audit.adapters.claude_code import (
     parse_hook_input,
 )
 from agent_audit.keys import load_public_key
-from agent_audit.report import format_json_report, format_text_report
-from agent_audit.verify import ChainCheckOutcome, verify_log
+from agent_audit.report import (
+    format_json_report,
+    format_text_report,
+    format_tree_json_report,
+    format_tree_text_report,
+)
+from agent_audit.verify import ChainCheckOutcome, verify_log, verify_tree
 
 EXIT_OK = 0
 EXIT_CHAIN_BREAK = 1
@@ -34,6 +69,11 @@ EXIT_SIGNATURE_FAIL = 2
 EXIT_KEY_RESOLUTION = 3
 EXIT_MALFORMED = 4
 EXIT_EMPTY = 5
+EXIT_PARTIAL = 6
+EXIT_OFF_CANONICAL = 7
+EXIT_MANIFEST_MISMATCH = 8
+EXIT_MANIFEST_INTEGRITY = 9
+EXIT_REDACTION_FORGERY = 10
 
 _OUTCOME_TO_EXIT: dict[ChainCheckOutcome, int] = {
     ChainCheckOutcome.OK: EXIT_OK,
@@ -42,6 +82,11 @@ _OUTCOME_TO_EXIT: dict[ChainCheckOutcome, int] = {
     ChainCheckOutcome.KEY_RESOLUTION: EXIT_KEY_RESOLUTION,
     ChainCheckOutcome.MALFORMED_JSONL: EXIT_MALFORMED,
     ChainCheckOutcome.EMPTY: EXIT_EMPTY,
+    ChainCheckOutcome.PARTIAL: EXIT_PARTIAL,
+    ChainCheckOutcome.OFF_CANONICAL: EXIT_OFF_CANONICAL,
+    ChainCheckOutcome.MANIFEST_PUBKEY_MISMATCH: EXIT_MANIFEST_MISMATCH,
+    ChainCheckOutcome.MANIFEST_INTEGRITY: EXIT_MANIFEST_INTEGRITY,
+    ChainCheckOutcome.REDACTION_FORGERY: EXIT_REDACTION_FORGERY,
 }
 
 
@@ -53,14 +98,18 @@ def cli() -> None:
 @cli.command("verify")
 @click.argument(
     "log_path",
-    type=click.Path(exists=True, dir_okay=False, readable=True, path_type=Path),
+    type=click.Path(exists=True, dir_okay=True, readable=True, path_type=Path),
 )
 @click.option(
     "--pubkey",
-    "pubkey_path",
+    "pubkey_paths",
     type=click.Path(exists=True, dir_okay=False, readable=True, path_type=Path),
-    required=True,
-    help="Path to Ed25519 public-key PEM file.",
+    multiple=True,
+    help=(
+        "Path to an Ed25519 public-key PEM file. Repeatable — pass one per "
+        "signing key when a chain rotates keys. In directory mode the key stored "
+        "in the manifest is loaded automatically, so --pubkey is optional there."
+    ),
 )
 @click.option(
     "--format",
@@ -70,15 +119,41 @@ def cli() -> None:
     show_default=True,
     help="Output format. 'report' is byte-deterministic plain text.",
 )
-def cmd_verify(log_path: Path, pubkey_path: Path, fmt: str) -> None:
-    """Verify an audit JSONL log against an Ed25519 public key."""
-    try:
-        pubkey, key_id = load_public_key(pubkey_path)
-    except (OSError, ValueError, TypeError) as e:
-        click.echo(f"agent-audit: failed to load public key: {e}", err=True)
+def cmd_verify(log_path: Path, pubkey_paths: tuple[Path, ...], fmt: str) -> None:
+    """Verify an audit trail.
+
+    LOG_PATH may be a single JSONL file (the original single-file, single-key
+    contract, unchanged) or a DIRECTORY of daily `audit-YYYY-MM-DD.jsonl` files
+    with a `manifest.json`. Directory mode walks logical chains across files,
+    resolves rotated keys, and cross-checks the manifest.
+    """
+    # Load every provided pubkey into a keyid -> key pool (rotated-key support).
+    pubkeys = {}
+    for p in pubkey_paths:
+        try:
+            key, key_id = load_public_key(p)
+        except (OSError, ValueError, TypeError) as e:
+            click.echo(f"agent-audit: failed to load public key {p}: {e}", err=True)
+            sys.exit(EXIT_KEY_RESOLUTION)
+        pubkeys[key_id] = key
+
+    if log_path.is_dir():
+        tree = verify_tree(log_path, pubkeys)
+        if fmt == "report":
+            click.echo(format_tree_text_report(tree), nl=False)
+        else:
+            click.echo(format_tree_json_report(tree), nl=False)
+        sys.exit(_OUTCOME_TO_EXIT[tree.outcome])
+
+    # Single-file mode — identical semantics to v0.1.
+    if not pubkeys:
+        click.echo(
+            "agent-audit: --pubkey is required when verifying a single file",
+            err=True,
+        )
         sys.exit(EXIT_KEY_RESOLUTION)
 
-    result = verify_log(log_path, {key_id: pubkey})
+    result = verify_log(log_path, pubkeys)
 
     if fmt == "report":
         click.echo(format_text_report(result), nl=False)
@@ -103,20 +178,18 @@ def cmd_pubkey_fingerprint(pubkey_path: Path) -> None:
     click.echo(key_id)
 
 
-@cli.command("inspect")
-@click.argument(
-    "log_path",
-    type=click.Path(exists=True, dir_okay=False, readable=True, path_type=Path),
-)
-@click.option(
-    "--head",
-    type=int,
-    default=10,
-    show_default=True,
-    help="Show first N records.",
-)
-def cmd_inspect(log_path: Path, head: int) -> None:
-    """Print a one-line summary per record (tool, chain, policy)."""
+def cmd_inspect(log_path: Path, head: int = 10) -> None:
+    """Print a one-line summary per record (tool, chain, policy, outcome).
+
+    Plain function (not a click.Command) so it can be called and tested
+    directly, e.g. ``cmd_inspect(log_path, head=10)``. The ``inspect`` CLI
+    subcommand below is a thin click wrapper around it.
+
+    Deliberately reads raw dicts and never validates against the ``Record``
+    Pydantic model — that is what keeps pre-v1.1 records (missing
+    ``payload.outcome``) inspectable. Every field access below uses the
+    ``.get(..., "?")`` fallback convention for exactly this reason.
+    """
     shown = 0
     with open(log_path, encoding="utf-8") as f:
         for line_num, raw in enumerate(f, start=1):
@@ -136,12 +209,30 @@ def cmd_inspect(log_path: Path, head: int) -> None:
             payload = record.get("payload", {}) or {}
             tool = (payload.get("tool") or {}).get("name", "?")
             policy_kind = (payload.get("policy") or {}).get("kind", "?")
+            outcome_kind = (payload.get("outcome") or {}).get("kind", "?")
             click.echo(
                 f"line {line_num}: chain={env.get('chain_id', '?')!s} "
                 f"step={header.get('step_id', '?')!s} tool={tool!s} "
-                f"policy={policy_kind!s}"
+                f"policy={policy_kind!s} outcome={outcome_kind!s}"
             )
             shown += 1
+
+
+@cli.command("inspect")
+@click.argument(
+    "log_path",
+    type=click.Path(exists=True, dir_okay=False, readable=True, path_type=Path),
+)
+@click.option(
+    "--head",
+    type=int,
+    default=10,
+    show_default=True,
+    help="Show first N records.",
+)
+def _cmd_inspect(log_path: Path, head: int) -> None:
+    """Print a one-line summary per record (tool, chain, policy, outcome)."""
+    cmd_inspect(log_path, head)
 
 
 @cli.command("hook-record")
@@ -204,7 +295,12 @@ __all__ = [
     "EXIT_EMPTY",
     "EXIT_KEY_RESOLUTION",
     "EXIT_MALFORMED",
+    "EXIT_MANIFEST_INTEGRITY",
+    "EXIT_MANIFEST_MISMATCH",
+    "EXIT_OFF_CANONICAL",
     "EXIT_OK",
+    "EXIT_PARTIAL",
+    "EXIT_REDACTION_FORGERY",
     "EXIT_SIGNATURE_FAIL",
     "cli",
     "main",
