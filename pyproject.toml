@@ -1,6 +1,6 @@
 [project]
 name = "chiplog"
-version = "0.2.2"
+version = "0.2.3"
 description = "Cryptographically-linked records of AI agent tool calls. Forward-compatible foundation for SOC 2 / ISO 42001 / EU AI Act Article 12 evidence."
 authors = [
     { name = "Nikolay Semernya", email = "nsemernia@gmail.com" }
