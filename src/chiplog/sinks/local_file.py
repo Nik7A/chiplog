@@ -4,7 +4,12 @@ Each write:
   1. Append the JSON-encoded record + newline to today's `audit-YYYY-MM-DD.jsonl`.
   2. fsync (F_FULLFSYNC on macOS for true platter durability).
   3. Update in-memory manifest: chain head, file checksum, pubkey info.
-  4. Atomically write the manifest to `manifest.json`.
+  4. Append the resulting state as one line to `manifest.journal` + fsync.
+
+`manifest.json` is a checkpoint, written once at construction (or when
+`declare_pubkey`/redaction state changes) — never rewritten per record.
+Readers call `Manifest.load_or_create`, which replays the journal over the
+checkpoint to reconstruct current state.
 
 Rolling SHA-256 per daily file avoids O(N²) re-hashing on large logs.
 
@@ -29,8 +34,14 @@ from pathlib import Path
 from typing import Any, Callable
 
 from chiplog.integrity import compute_chain_link
-from chiplog.journal import _fsync_fd
-from chiplog.manifest import ChainState, FileChecksum, Manifest
+from chiplog.journal import _fsync_fd, append_entry
+from chiplog.manifest import (
+    JOURNAL_FILENAME,
+    ChainState,
+    FileChecksum,
+    JournalEntry,
+    Manifest,
+)
 from chiplog.sinks.base import DiskFullError, SinkError
 
 
@@ -114,6 +125,7 @@ class LocalFileSink:
         self.dir.mkdir(parents=True, exist_ok=True)
 
         self._manifest_path = self.dir / "manifest.json"
+        self._journal_path = self.dir / JOURNAL_FILENAME
         self._manifest = Manifest.load_or_create(self._manifest_path)
         self._manifest_dirty = False
 
@@ -231,20 +243,20 @@ class LocalFileSink:
 
             daily.append_line(line.encode("utf-8"))
 
-            self._update_manifest_in_memory(record, filename, daily.sha256())
+            entry = self._update_manifest_in_memory(record, filename, daily.sha256())
 
             try:
-                self._manifest.save_atomic(self._manifest_path)
+                append_entry(self._journal_path, entry)
             except OSError as e:
                 if e.errno == errno.ENOSPC:
                     raise DiskFullError(
-                        "out of disk space writing manifest"
+                        "out of disk space writing manifest journal"
                     ) from e
-                raise SinkError(f"failed to flush manifest: {e}") from e
+                raise SinkError(f"failed to append to manifest journal: {e}") from e
 
     def _update_manifest_in_memory(
         self, record: dict[str, Any], filename: str, file_sha256: str
-    ) -> None:
+    ) -> JournalEntry:
         env = record["envelope"]
         chain_id = env["chain_id"]
         record_id = env["record_id"]
@@ -291,6 +303,22 @@ class LocalFileSink:
         # most recently declared key, kept for verifiers that predate the map.
         if self._manifest.pubkey_id is None:
             self._manifest.pubkey_id = env["key_id"]
+
+        chain = self._manifest.chains[chain_id]
+        fc = self._manifest.files[filename]
+        return JournalEntry(
+            chain_id=chain_id,
+            genesis_hash=chain.genesis_hash,
+            first_record_id=chain.first_record_id,
+            head_hash=chain.head_hash,
+            last_record_id=chain.last_record_id,
+            record_count=chain.record_count,
+            file=filename,
+            file_sha256=fc.sha256,
+            file_record_count=fc.record_count,
+            file_first_record_id=fc.first_record_id,
+            redaction_disabled=self._manifest.redaction_disabled,
+        )
 
     async def flush(self) -> None:
         # Per-write fsync already gives us "all records are durable on disk

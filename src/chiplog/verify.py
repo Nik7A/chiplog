@@ -22,7 +22,9 @@ from chiplog.integrity import (
     compute_chain_link,
     verify_record,
 )
+from chiplog.journal import JournalCorruptError, replay
 from chiplog.keys import load_public_key_from_pem
+from chiplog.manifest import JOURNAL_FILENAME, Manifest
 from chiplog.redact import redaction_authenticity
 
 
@@ -440,7 +442,14 @@ def _read_manifest_redaction_state(manifest: dict[str, object] | None) -> str:
 
 def _load_manifest_raw(root: Path) -> tuple[dict[str, object] | None, Finding | None]:
     """Best-effort manifest load. Never raises: a corrupt/absent manifest DEGRADES
-    to log-only verification with an explicit finding, and is NEVER a pass."""
+    to log-only verification with an explicit finding, and is NEVER a pass.
+
+    Loads the checkpoint and replays the sibling `manifest.journal` on top (same
+    logic as `Manifest.load_or_create`): the sink no longer rewrites manifest.json
+    per record, so the checkpoint alone lags by up to a compaction interval.
+    Skipping the replay here would make a directory with a live journal read as
+    stale against the log it is supposed to attest.
+    """
     path = root / "manifest.json"
     if not path.is_file():
         return None, Finding(
@@ -465,7 +474,19 @@ def _load_manifest_raw(root: Path) -> tuple[dict[str, object] | None, Finding | 
             kind="manifest_corrupt",
             detail="manifest.json is not a JSON object — cross-check skipped",
         )
-    return data, None
+    try:
+        manifest = Manifest.from_dict(data)
+        for entry in replay(root / JOURNAL_FILENAME):
+            manifest.apply_journal_entry(entry)
+    except (ValueError, TypeError, JournalCorruptError) as e:
+        return None, Finding(
+            kind="manifest_corrupt",
+            detail=(
+                f"manifest.json/manifest.journal could not be read ({e}) — "
+                "manifest cross-check skipped; verification is log-only"
+            ),
+        )
+    return manifest.to_dict(), None
 
 
 def _file_digest(path: Path) -> str:

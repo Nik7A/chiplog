@@ -14,9 +14,15 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
+from chiplog.emit import AuditRecorder
 from chiplog.journal import JournalCorruptError, append_entry, replay
+from chiplog.keys import SigningKey, compute_key_id
 from chiplog.manifest import MANIFEST_SCHEMA_VERSION, JournalEntry, Manifest, RedactionState
+from chiplog.schema.v1 import NoGateReason, Output, ToolCall, success, ungated
+from chiplog.sinks.local_file import LocalFileSink
 
 
 def _entry(**over: object) -> JournalEntry:
@@ -160,3 +166,41 @@ def test_an_unknown_schema_version_still_raises(tmp_path: Path) -> None:
     p.write_text(_json.dumps({"schema_version": "manifest.v9.9", "chains": {}, "files": {}}))
     with pytest.raises(ValueError, match="unsupported manifest schema_version"):
         Manifest.load_or_create(p)
+
+
+def _mkkey() -> SigningKey:
+    pk = Ed25519PrivateKey.generate()
+    pub = pk.public_key()
+    return SigningKey(private_key=pk, public_key=pub, key_id=compute_key_id(pub))
+
+
+async def _emit(rec: AuditRecorder, n: int) -> None:
+    for i in range(n):
+        await rec.record(
+            session_id="s", step_id=f"step-{i}", tool=ToolCall(name="Read"),
+            input={"i": i}, output=Output(body=""),
+            policy=ungated(NoGateReason.AUTO_ALLOWED_LOW_RISK), outcome=success(),
+        )
+
+
+async def test_manifest_json_is_not_rewritten_per_record(tmp_path: Path) -> None:
+    # The defect. ~1800 full rewrites + fsyncs a day, growing to ~22.5 MB.
+    d = tmp_path / "audit"
+    sk = _mkkey()
+    sink = LocalFileSink(dir=d, pubkey_pem=sk.public_key.public_bytes(
+        Encoding.PEM, PublicFormat.SubjectPublicKeyInfo))
+    rec = AuditRecorder(sink=sink, signing_key=sk, chain_id="c1")
+    await _emit(rec, 1)
+    mtime_after_first = (d / "manifest.json").stat().st_mtime_ns
+    await _emit(rec, 5)
+    assert (d / "manifest.json").stat().st_mtime_ns == mtime_after_first
+
+
+async def test_each_record_appends_one_journal_line(tmp_path: Path) -> None:
+    d = tmp_path / "audit"
+    sk = _mkkey()
+    sink = LocalFileSink(dir=d, pubkey_pem=sk.public_key.public_bytes(
+        Encoding.PEM, PublicFormat.SubjectPublicKeyInfo))
+    rec = AuditRecorder(sink=sink, signing_key=sk, chain_id="c1")
+    await _emit(rec, 4)
+    assert len(replay(d / "manifest.journal")) == 4

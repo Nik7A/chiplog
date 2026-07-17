@@ -42,6 +42,7 @@ from chiplog.cli import (
 from chiplog.emit import AuditRecorder
 from chiplog.integrity import compute_chain_link, sign_record
 from chiplog.keys import SigningKey, compute_key_id
+from chiplog.manifest import Manifest
 from chiplog.schema.v1 import NoGateReason, Output, ToolCall, success, ungated
 from chiplog.sinks.local_file import LocalFileSink
 from chiplog.verify import (
@@ -126,6 +127,25 @@ def _rewrite_manifest(dir_: Path, **overrides: object) -> None:
     (dir_ / "manifest.json").write_text(json.dumps(m, indent=2))
 
 
+def _materialize_manifest(dir_: Path) -> None:
+    """Collapse checkpoint + journal into `manifest.json` and drop the journal.
+
+    Task 4 replaced the per-record manifest rewrite with an append-only
+    `manifest.journal`: `manifest.json` alone is now a stale checkpoint, and
+    `Manifest.apply_journal_entry` restates a chain/file wholesale, so a live
+    journal silently overrides any value hand-edited into the checkpoint
+    afterwards. The fixtures below simulate a manifest that lies about the
+    log's true state; the lie has to actually be what gets read back, so
+    materialize the current (honest) state into the checkpoint and drop the
+    journal first — the same collapse `LocalFileSink` compaction performs,
+    just invoked by hand here since these tests edit the file directly.
+    """
+    manifest_path = dir_ / "manifest.json"
+    m = Manifest.load_or_create(manifest_path)
+    m.save_atomic(manifest_path)
+    (dir_ / "manifest.journal").unlink(missing_ok=True)
+
+
 def _resync_manifest_file(dir_: Path, fpath: Path) -> None:
     """Make the manifest's per-file ``sha256`` honestly attest ``fpath``'s
     current bytes, while leaving ``record_count`` at the canonical tally.
@@ -142,6 +162,7 @@ def _resync_manifest_file(dir_: Path, fpath: Path) -> None:
     """
     import hashlib
 
+    _materialize_manifest(dir_)
     data = fpath.read_bytes()
     sha = hashlib.sha256(data).hexdigest()
     m = json.loads((dir_ / "manifest.json").read_text())
@@ -722,6 +743,7 @@ async def test_manifest_record_count_lie_undercount_is_nonzero(
     """A manifest that attests MORE canonical records than the log actually
     contains (the count-lie, under-count direction) is an integrity break."""
     d, sk = await _clean_dir(tmp_path, 5)
+    _materialize_manifest(d)
     m = json.loads((d / "manifest.json").read_text())
     m["chains"]["c1"]["record_count"] = 99999
     (d / "manifest.json").write_text(json.dumps(m, indent=2))
@@ -736,6 +758,7 @@ async def test_manifest_file_sha256_lie_is_nonzero(tmp_path: Path) -> None:
     """A file whose actual sha256 disagrees with the manifest's per-file
     attestation is an integrity break, even with the chain count intact."""
     d, sk = await _clean_dir(tmp_path, 5)
+    _materialize_manifest(d)
     m = json.loads((d / "manifest.json").read_text())
     fname = next(iter(m["files"]))
     m["files"][fname]["sha256"] = "0" * 64  # attest a sha the file does not have
@@ -752,6 +775,7 @@ async def test_manifest_file_record_count_lie_is_nonzero(tmp_path: Path) -> None
     record_count is an integrity break (sha256 left honest to isolate the
     count check)."""
     d, sk = await _clean_dir(tmp_path, 5)
+    _materialize_manifest(d)
     m = json.loads((d / "manifest.json").read_text())
     fname = next(iter(m["files"]))
     m["files"][fname]["record_count"] = 4  # 5 records are actually present
@@ -767,6 +791,7 @@ async def test_count_mismatch_finding_does_not_guess_cause(tmp_path: Path) -> No
     """The count anchor states the fact — attested vs reconstructed — and does
     not speculate about why they differ."""
     d, sk = await _clean_dir(tmp_path, 5)
+    _materialize_manifest(d)
     m = json.loads((d / "manifest.json").read_text())
     m["chains"]["c1"]["record_count"] = 3
     (d / "manifest.json").write_text(json.dumps(m, indent=2))
@@ -812,6 +837,7 @@ async def test_cli_verify_manifest_count_lie_exit_9(tmp_path: Path) -> None:
     from click.testing import CliRunner
 
     d, _ = await _clean_dir(tmp_path, 5)
+    _materialize_manifest(d)
     m = json.loads((d / "manifest.json").read_text())
     m["chains"]["c1"]["record_count"] = 99999
     (d / "manifest.json").write_text(json.dumps(m, indent=2))
