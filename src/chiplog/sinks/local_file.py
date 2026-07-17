@@ -143,8 +143,14 @@ class LocalFileSink:
                 if isinstance(pubkey_pem, bytes)
                 else pubkey_pem
             )
-            self._manifest.pubkey_pem = pem_str
-            self._manifest_dirty = True
+            # Declares, never replaces. This used to assign straight over
+            # `pubkey_pem`, so starting a sink with a new key deleted the old
+            # key from the only place it was stored and made every record it had
+            # signed unverifiable forever.
+            pubkeys_before = dict(self._manifest.pubkeys)
+            self._manifest.declare_pubkey(pem_str)
+            if self._manifest.pubkeys != pubkeys_before:
+                self._manifest_dirty = True
 
         # Seed the latch if the caller declares redaction off at construction.
         # This is a HINT, not the authoritative source: the recorder drives the
@@ -292,8 +298,17 @@ class LocalFileSink:
             file_csum.record_count += 1
             file_csum.last_record_id = record_id
 
-        # Pubkey id (cheap to set; overwritten if subsequent records use a
-        # different key — that's a v0.2 multi-key story).
+        # Fallback for a sink constructed without `pubkey_pem`: name the first
+        # key that signed here, so `pubkey_id` is not simply empty. It cannot
+        # supply the PEM — the record carries an id, not a key — so those records
+        # still need `--pubkey` at verify time. Declaring the key at construction
+        # is what makes the directory verifiable on its own.
+        #
+        # This comment used to say the field was "overwritten if subsequent
+        # records use a different key — that's a v0.2 multi-key story". Both
+        # halves were wrong: the code is set-once, and the multi-key story never
+        # landed in v0.2. `pubkeys` is that story; `pubkey_id` is now just the
+        # most recently declared key, kept for verifiers that predate the map.
         if self._manifest.pubkey_id is None:
             self._manifest.pubkey_id = env["key_id"]
 

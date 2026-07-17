@@ -20,6 +20,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from chiplog.keys import load_public_key_from_pem
+
 MANIFEST_SCHEMA_VERSION = "manifest.v1.0"
 
 
@@ -92,8 +94,22 @@ class Manifest:
     """Persistent state for LocalFileSink."""
 
     schema_version: str = MANIFEST_SCHEMA_VERSION
+    # The most recently declared key. Both track the CURRENT key and are
+    # overwritten on rotation — which is safe only because `pubkeys` below keeps
+    # every key that ever signed here. They exist for verifiers that predate
+    # `pubkeys`; `pubkeys` is the authoritative set.
     pubkey_id: str | None = None
     pubkey_pem: str | None = None
+    # key_id -> public key PEM, for EVERY key that has declared itself to this
+    # directory. Append-only: rotation adds, it never replaces.
+    #
+    # This was one mutable `pubkey_pem`, and rotation overwrote it. The previous
+    # key vanished from the only place it was stored and its records became
+    # permanently unverifiable — 330 of them, once, on real evidence. A public
+    # key is not secret, so single-copy storage bought nothing and cost
+    # everything. Every record's envelope carries its own `key_id`, so the
+    # verifier only ever needed somewhere to look the id up.
+    pubkeys: dict[str, str] = field(default_factory=dict)
     chains: dict[str, ChainState] = field(default_factory=dict)
     files: dict[str, FileChecksum] = field(default_factory=dict)
     # Self-audit checklist item #12: the redaction state must surface in the
@@ -119,11 +135,26 @@ class Manifest:
         """Fold one record's observed redaction state into the latch."""
         self.redaction_state = self.redaction_state.latch(observed_disabled)
 
+    def declare_pubkey(self, pem: str) -> str:
+        """Record a public key as having signed here. Returns its key_id.
+
+        Appends. A key already known is not re-added, and no key is ever
+        replaced: the previous one stays verifiable forever, which is the whole
+        point of the map. `pubkey_id` / `pubkey_pem` follow the current key for
+        readers that predate `pubkeys`.
+        """
+        _, key_id = load_public_key_from_pem(pem)
+        self.pubkeys.setdefault(key_id, pem)
+        self.pubkey_id = key_id
+        self.pubkey_pem = pem
+        return key_id
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "schema_version": self.schema_version,
             "pubkey_id": self.pubkey_id,
             "pubkey_pem": self.pubkey_pem,
+            "pubkeys": dict(self.pubkeys),
             "chains": {k: asdict(v) for k, v in self.chains.items()},
             "files": {k: asdict(v) for k, v in self.files.items()},
             "redaction_state": self.redaction_state.value,
@@ -137,10 +168,29 @@ class Manifest:
                 f"unsupported manifest schema_version {schema_version!r}; "
                 f"this build supports {MANIFEST_SCHEMA_VERSION!r}"
             )
+        # Migrate a manifest written before `pubkeys` existed: its single
+        # `pubkey_pem` is a key that really did sign here, so it belongs in the
+        # map. Its id is derived from the PEM itself rather than read from
+        # `pubkey_id`, which was set-once and may name a different key entirely.
+        # Only keys still present can be recovered — a PEM already overwritten
+        # by a rotation is gone, and nothing here can bring it back.
+        pubkeys: dict[str, str] = dict(data.get("pubkeys", {}))
+        legacy_pem = data.get("pubkey_pem")
+        if legacy_pem and not pubkeys:
+            try:
+                _, legacy_id = load_public_key_from_pem(legacy_pem)
+            except Exception:
+                # An unreadable PEM is the verifier's problem to report, not
+                # ours to raise on: refusing to load the manifest here would
+                # take the chain heads down with it.
+                pass
+            else:
+                pubkeys[legacy_id] = legacy_pem
         return cls(
             schema_version=schema_version,
             pubkey_id=data.get("pubkey_id"),
-            pubkey_pem=data.get("pubkey_pem"),
+            pubkey_pem=legacy_pem,
+            pubkeys=pubkeys,
             chains={
                 k: ChainState(**v) for k, v in data.get("chains", {}).items()
             },
