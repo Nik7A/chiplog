@@ -28,7 +28,7 @@ THE RULE THIS MODULE EXISTS TO ENFORCE — control flow is not an outcome:
   `GraphInterrupt` and the tool is RE-EXECUTED on resume; a `ParentCommand`
   carries the result of a tool that SUCCEEDED. An entry point that took any
   exception for a failure would sign `outcome: error` over a call that did not
-  fail. `_is_control_flow_signal` is the guard.
+  fail. `is_control_flow_signal` is the guard.
 
 Both directions are dishonest, and both have shipped here. See
 `tests/test_outcome_honesty_matrix.py` before changing either.
@@ -381,10 +381,23 @@ def _control_flow_signal_type() -> type[BaseException] | None:
     return GraphBubbleUp
 
 
-def _is_control_flow_signal(exc: BaseException) -> bool:
-    """True when the runtime raised to redirect control flow, not to report a failure."""
+def is_control_flow_signal(exc: BaseException) -> bool:
+    """True when the runtime raised to redirect control flow, not to report a failure.
+
+    Public because a host instrumenting its own LangGraph nodes needs exactly
+    this distinction to stay honest: park a node at a human gate, record it as
+    a failure, and you have signed a false failure. The alternative a host is
+    left with — restating the boundary as `isinstance(exc, (GraphInterrupt,
+    ParentCommand))` — misses `GraphDrained` today and drifts silently the next
+    time the runtime widens it. This delegates instead, so it cannot drift.
+    """
     signal_type = _control_flow_signal_type()
     return signal_type is not None and isinstance(exc, signal_type)
+
+
+# Back-compat: hosts import the underscore name today and pin >=0.2,<0.3.
+# Removing it inside that range would break their resolve. Drop it in 0.3.
+_is_control_flow_signal = is_control_flow_signal
 
 
 def audited_tool(
@@ -418,7 +431,7 @@ def audited_tool(
     The returned failure is passed through to the caller unaltered.
 
     A raise is NOT evidence of failure either, which is why the generic
-    exception branch asks `_is_control_flow_signal` first. LangGraph signals
+    exception branch asks `is_control_flow_signal` first. LangGraph signals
     control flow by raising: `interrupt()` inside a tool raises `GraphInterrupt`,
     the graph suspends for human input, and on resume the tool is RE-EXECUTED
     from the top and typically succeeds. Recording `error(GraphInterrupt)` would
@@ -500,7 +513,7 @@ def audited_tool(
                     # neither succeeded nor failed: it did not finish.
                     outcome = (
                         unobserved(UnobservedReason.CONTROL_FLOW_SIGNAL)
-                        if _is_control_flow_signal(exc)
+                        if is_control_flow_signal(exc)
                         else error(type(exc).__name__, str(exc))
                     )
                     try:
@@ -623,7 +636,7 @@ def audited_tool(
                 # signal, not a failure. Same rule, same reason.
                 outcome = (
                     unobserved(UnobservedReason.CONTROL_FLOW_SIGNAL)
-                    if _is_control_flow_signal(exc)
+                    if is_control_flow_signal(exc)
                     else error(type(exc).__name__, str(exc))
                 )
                 try:
@@ -823,7 +836,7 @@ class AuditMiddleware(_AgentMiddleware):
             # either signs a failure that never happened.
             outcome = (
                 unobserved(UnobservedReason.CONTROL_FLOW_SIGNAL)
-                if _is_control_flow_signal(exc)
+                if is_control_flow_signal(exc)
                 else error(type(exc).__name__, str(exc))
             )
             try:
@@ -927,7 +940,7 @@ class AuditMiddleware(_AgentMiddleware):
             # a failure. The async ToolNode path re-raises it identically.
             outcome = (
                 unobserved(UnobservedReason.CONTROL_FLOW_SIGNAL)
-                if _is_control_flow_signal(exc)
+                if is_control_flow_signal(exc)
                 else error(type(exc).__name__, str(exc))
             )
             try:
@@ -995,4 +1008,4 @@ class AuditMiddleware(_AgentMiddleware):
         )
 
 
-__all__ = ["AuditMiddleware", "audited_tool"]
+__all__ = ["AuditMiddleware", "audited_tool", "is_control_flow_signal"]
