@@ -1,5 +1,70 @@
 # Changelog
 
+## 0.2.2 — 2026-07-17
+
+Four defects, all reported by a host putting the library into real use rather
+than by reading the code. One of them had already destroyed evidence.
+
+### Fixed — rotation destroyed the previous key's records, permanently
+
+The manifest held a single `pubkey_pem` and `LocalFileSink` overwrote it
+unconditionally. Starting a recorder with a different key deleted the previous
+public key from the only place it was stored, and every record it had signed
+became unverifiable forever — there is no key left to check the signature
+against, and nothing recovers it.
+
+This is not a hypothetical. **330 records** on the author's own agent trail are
+in exactly that state, signed with a key that exists nowhere:
+`unknown_key_id: no public key for key_id=b0ee6d6c582ec87b`. A public key is
+not secret; single-copy storage in a mutable field bought nothing.
+
+- `manifest.pubkeys` maps `key_id` → PEM and is append-only. Rotation adds; it
+  never replaces. Every record's envelope already carries its `key_id`, so the
+  verifier only needed somewhere to look it up. Nothing about the signature
+  form changes, and `verify` resolves rotated-away keys from the manifest alone.
+- `pubkey_id` / `pubkey_pem` remain, tracking the most recently declared key,
+  for verifiers that predate the map. They are no longer the only copy.
+- `schema_version` is unchanged, so existing manifests stay readable. One
+  written before `pubkeys` migrates on load, deriving the key_id from the PEM
+  it stores. Keys already overwritten by a past rotation are gone; nothing can
+  bring them back.
+
+Four tests changed, and one of them is the point: the suite already covered
+this exact scenario and pinned the loss as correct — it handed the rotated-away
+key back to the verifier from outside and asserted the resulting mismatch. In
+the real incident nobody had that key to hand back. Three more tests harvested
+their "missing key" condition from the destructive overwrite itself. That
+condition is real, so it is now created deliberately rather than taken from a bug.
+
+### Fixed — `__version__` was two releases stale, and it is public API
+
+It read `0.1.2` while the distribution was `0.2.1`, and it is in `__all__`, so
+anything branching on `chiplog.__version__` got a wrong answer. It is now
+derived from the installed dist metadata: the number lives once, in the
+packaging config. 0.2.1 established that "keep the version numbers accurate" is
+not a rule that holds — the rule that holds removes the second copy.
+
+### Fixed — the sink promised serialisation it does not provide
+
+`_DailyFileState` told callers `LocalFileSink` serialises appends for them with
+`_write_lock`, without qualification. It is a `threading.Lock`; the guarantee
+stops at the process boundary. Two concurrent writers produced 7 forked chains
+across 5825 records on a real trail — nothing corrupted, every resolvable
+signature valid, but `verify` reported CHAIN_BREAK over intact evidence, which
+teaches an operator to disregard the verifier. The promise now names its scope.
+Making appends genuinely cross-process safe is a change to the write path and
+is not this release.
+
+### Added — `is_control_flow_signal` is public
+
+A host instrumenting LangGraph nodes needs to tell a node that parked on a
+control-flow signal from one that crashed; get it wrong and you sign a false
+failure, which is exactly as dishonest as a false success. The predicate was
+underscore-prefixed, leaving hosts to import a private name or restate the
+boundary themselves — and a hand-rolled restatement misses `GraphDrained`
+today. It is now public and in `__all__`. The underscore name remains an alias
+for hosts already importing it; it goes in 0.3.
+
 ## 0.2.1 — 2026-07-17
 
 ### Fixed — the verifier's own report made three false claims
