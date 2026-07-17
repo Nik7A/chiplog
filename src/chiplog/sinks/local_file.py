@@ -63,8 +63,16 @@ class _DailyFileState:
 
     The rolling hash is only equal to the file's real SHA-256 if the context is
     fed the lines in the SAME ORDER the file received them. Callers must not let
-    two appends interleave — `LocalFileSink` guarantees that with `_write_lock`,
-    which is why `append_line` does no locking of its own.
+    two appends interleave — `LocalFileSink` serialises them with `_write_lock`,
+    which is why `append_line` does no locking of its own. That guarantee stops
+    at the process boundary: `_write_lock` is a `threading.Lock`, so it orders
+    appends from threads and recorders sharing ONE process and nothing else. A
+    second process appending to the same log is not serialised by this sink, and
+    the result is a forked chain that `verify` reports as CHAIN_BREAK over
+    evidence that is in fact intact. `emit.py` states the same limit for the
+    recorder; the only cross-process serialisation in the library is the `flock`
+    in the `chiplog hook-record` subprocess, which covers the Claude Code hook
+    path and nothing else.
     """
 
     def __init__(self, path: Path) -> None:
