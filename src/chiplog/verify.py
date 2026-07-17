@@ -600,6 +600,32 @@ def verify_tree(
     if manifest is not None:
         claimed = manifest.get("pubkey_id")
         manifest_pubkey_id_claimed = claimed if isinstance(claimed, str) else None
+
+        # Every key that ever declared itself to this directory. A rotated-away
+        # key is only here because the manifest stopped overwriting the scalar
+        # `pubkey_pem` — before that, its records were unverifiable forever. The
+        # id is derived from each PEM rather than trusted from its map key, on
+        # the same principle that `pubkey_id` is never trusted below.
+        stored = manifest.get("pubkeys")
+        if isinstance(stored, dict):
+            for claimed_id, stored_pem in stored.items():
+                if not isinstance(stored_pem, str) or not stored_pem.strip():
+                    continue
+                try:
+                    key, derived = load_public_key_from_pem(stored_pem)
+                except (ValueError, TypeError) as e:
+                    findings.append(
+                        Finding(
+                            kind="manifest_pubkey_unloadable",
+                            detail=(
+                                f"manifest.pubkeys[{claimed_id!r}] could not be "
+                                f"loaded: {e}"
+                            ),
+                        )
+                    )
+                    continue
+                pubkeys.setdefault(derived, key)
+
         pem = manifest.get("pubkey_pem")
         if isinstance(pem, str) and pem.strip():
             try:

@@ -21,6 +21,7 @@ import json
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -98,6 +99,25 @@ async def _emit(
 def _append_raw_line(path: Path, record: dict[str, object]) -> None:
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(record) + "\n")
+
+
+def _manifest_dict(dir_: Path) -> dict[str, Any]:
+    parsed: dict[str, Any] = json.loads((dir_ / "manifest.json").read_text())
+    return parsed
+
+
+def _strip_pubkeys_except(dir_: Path, keep: dict[str, bytes]) -> None:
+    """Make a key genuinely absent from the manifest, on purpose.
+
+    Several tests below need a record whose key cannot be resolved. They used to
+    get one for free from rotation, because rotation deleted the previous key —
+    that was the defect, not a fixture. The condition is real and worth testing,
+    so it is now created deliberately rather than harvested from a bug.
+    """
+    _rewrite_manifest(
+        dir_,
+        pubkeys={kid: pem.decode() for kid, pem in keep.items()},
+    )
 
 
 def _rewrite_manifest(dir_: Path, **overrides: object) -> None:
@@ -190,12 +210,18 @@ async def test_key_rotation_midchain_both_keys_available(tmp_path: Path) -> None
     )
     await _emit(rec_b, 3, start=3)
 
-    # verify_tree derives B from the manifest PEM; pass A explicitly for rotation.
-    r = verify_tree(d, {kid_a: sk_a.public_key})
+    # Nothing passed in. The manifest kept both keys, so it is sufficient on its
+    # own — which is the point: in the incident this test used to describe,
+    # nobody had the rotated-away key to pass in, because rotation had deleted
+    # the only copy. This test used to hand A back to the verifier from outside
+    # and assert the resulting mismatch, which pinned that loss as correct.
+    r = verify_tree(d)
     assert r.verified_records == 6
     assert r.unverifiable_no_key == 0
-    # pubkey_id is stale (set to A on first write, pem overwritten to B) → mismatch
-    assert r.outcome == ChainCheckOutcome.MANIFEST_PUBKEY_MISMATCH
+    # pubkey_id follows the current key now, so it agrees with pubkey_pem and
+    # there is nothing stale to mismatch on.
+    assert r.outcome == ChainCheckOutcome.OK
+    assert set(_manifest_dict(d)["pubkeys"]) == {kid_a, kid_b}
     assert kid_a in r.available_key_ids
     assert kid_b in r.available_key_ids
 
@@ -207,7 +233,7 @@ async def test_key_rotation_midchain_both_keys_available(tmp_path: Path) -> None
 
 async def test_missing_key_is_partial_not_fail_not_pass(tmp_path: Path) -> None:
     sk_a, _ = _mkkey()  # this key will be "absent" at verify time
-    sk_b, _ = _mkkey()
+    sk_b, kid_b = _mkkey()
     d = tmp_path / "audit"
     sink_a = LocalFileSink(dir=d, pubkey_pem=_pem(sk_a))
     rec_a = AuditRecorder(sink=sink_a, signing_key=sk_a, chain_id="c1")
@@ -219,7 +245,10 @@ async def test_missing_key_is_partial_not_fail_not_pass(tmp_path: Path) -> None:
     )
     await _emit(rec_b, 4, start=3)
 
-    # Only key B is available (via manifest PEM). Key A is genuinely absent.
+    # Only key B is available. Key A is genuinely absent — dropped from the
+    # manifest on purpose, because rotation no longer destroys it for us.
+    _strip_pubkeys_except(d, {kid_b: _pem(sk_b)})
+
     r = verify_tree(d)
     assert r.verified_records == 4
     assert r.unverifiable_no_key == 3
@@ -246,9 +275,14 @@ async def test_no_key_at_all_is_key_resolution_not_partial(tmp_path: Path) -> No
     sink = LocalFileSink(dir=d, pubkey_pem=_pem(sk_a))
     rec = AuditRecorder(sink=sink, signing_key=sk_a, chain_id="c1")
     await _emit(rec, 3)
-    # Overwrite the manifest PEM with B (a key that signed nothing here).
+    # Publish ONLY B (a key that signed nothing here), so A — which signed
+    # everything — cannot be resolved. Dropping A has to be explicit now that
+    # declaring B no longer deletes it.
     _rewrite_manifest(
-        d, pubkey_pem=_pem(sk_b).decode(), pubkey_id=kid_b
+        d,
+        pubkey_pem=_pem(sk_b).decode(),
+        pubkey_id=kid_b,
+        pubkeys={kid_b: _pem(sk_b).decode()},
     )
 
     r = verify_tree(d)
@@ -636,9 +670,9 @@ async def test_cli_partial_exit_6(tmp_path: Path) -> None:
         sink=sink_b, signing_key=sk_b, chain_id="c1", initial_prev_hash=head
     )
     await _emit(rec_b, 3, start=3)
-    # Make the manifest pubkey_id honest (== derived B) so mismatch does NOT fire;
-    # the only remaining defect is the 3 unverifiable A-records.
-    _rewrite_manifest(d, pubkey_id=kid_b)
+    # Drop A from the manifest so its 3 records are the only remaining defect.
+    # Rotation used to do this to us; now it has to be asked for.
+    _strip_pubkeys_except(d, {kid_b: _pem(sk_b)})
 
     result = CliRunner().invoke(cli, ["verify", str(d)])
     assert result.exit_code == EXIT_PARTIAL
