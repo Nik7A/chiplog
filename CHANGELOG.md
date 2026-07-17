@@ -1,5 +1,62 @@
 # Changelog
 
+## 0.2.3 — 2026-07-17
+
+One change, from a host running the library at a load the design never
+budgeted for: an agent that opens a fresh chain on every run.
+
+### Changed — the manifest is a checkpoint + a journal, not a full rewrite per record
+
+`LocalFileSink` rewrote the entire `manifest.json` and `F_FULLFSYNC`ed it on
+every single record, and `manifest.chains` is never pruned. That is cheap at
+one chain a day and quadratic-feeling under per-chain-per-run: a host measured
+it at **~90 KB/day of manifest writes against ~0.5 KB/day of actual records —
+~179× faster growth**, extrapolating to ~22.5 MB rewritten ~1800 times a day
+after 250 busy days. Nothing outside the library could fix it: the rewrite
+lives inside the sink, and pruning `chains` would lie about which chains exist.
+
+- `manifest.json` is now a cold **checkpoint**, rewritten only on compaction and
+  at construction-time key declaration.
+- `manifest.journal` takes one append-only JSON line per record, carrying the
+  **resulting** state of the chain and file that record touched — a result, not
+  a delta, so replay is "apply in order, last wins" and is idempotent. Reading a
+  directory means checkpoint + replay; writing a record means one journal append
+  and one fsync — the **same fsync count as before**, and O(1) bytes instead of
+  O(manifest).
+- Compaction fires at 1000 journal lines and on `close()`: it writes the
+  checkpoint, fsyncs, and only **then** drops the journal. A crash in that window
+  replays stale-but-idempotent lines onto a newer checkpoint — a no-op, which is
+  the whole reason entries state results rather than deltas.
+- Re-measured on the claim the report made: **2000 records across 200 chains now
+  write `manifest.json` 4 times, not 2000.**
+
+### Fixed — the sink docstring called the manifest a cache; the verifier never agreed
+
+The module docstring described the manifest as "NOT load-bearing for chain
+integrity." `verify` has always disagreed: it reports `MANIFEST_INTEGRITY` when
+the manifest contradicts the log — an integrity break, never a pass — and treats
+`files[].sha256` as the robust anchor. The manifest is an **attestation**, not a
+cache, and the docstring now says so. This is a documentation correctness fix,
+guarded by a test; it changes no behavior.
+
+### Compatibility
+
+`schema_version` bumps `manifest.v1.0` → `manifest.v2.0`, and here the bump is
+**required** (unlike the `pubkeys` change in 0.2.2, which deliberately avoided
+one — the cases are not symmetric). A v2 checkpoint's heads lag by up to a
+compaction interval, so a v1-only reader would take them as authoritative and
+report a **false** `MANIFEST_INTEGRITY` on honest evidence. Refusing to load is
+the honest failure. `from_dict` reads both v1.0 (no journal; its heads are
+authoritative as written) and v2.0; only v2.0 is written; an unknown version
+still raises.
+
+### Deliberately not addressed
+
+Cross-process append safety (still deferred); the pre-existing crash window
+between the JSONL record append and the manifest write, which this change
+neither closes nor widens (filed separately); signing the manifest; pruning
+`chains`.
+
 ## 0.2.2 — 2026-07-17
 
 Four defects, all reported by a host putting the library into real use rather
