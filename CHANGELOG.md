@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.2.1 — 2026-07-17
+
+### Fixed — the verifier's own report made three false claims
+
+The NON-CLAIMS block that ends every verification report told the reader the
+three limits disqualifying this library as primary audit evidence had been
+"fixed in v0.2", that "v0.2 closes this with the sidecar signer", and that
+"v0.2 adds RFC 3161 TSA timestamps". None of that shipped. v0.2 closed none of
+them; the signer and the TSA are still roadmap. `README.md` and `ROADMAP.md`
+have said so since 0.2.0 — the report disagreed with both.
+
+This is the worst place in the product to be wrong. The NON-CLAIMS block is
+the paragraph an auditor reads to learn what the report does not establish,
+and reports are byte-deterministic precisely so they can be pasted verbatim
+into an audit appendix. The false claim travelled into that appendix under a
+hash that matched across reviewers.
+
+The text was written on 2026-06-19, when v0.2 was still planned to carry the
+hardening. Two later passes corrected exactly this class of claim — one in
+`README.md`, one across `README.md` and `ROADMAP.md` — and both missed this
+one, because it is a string in code rather than prose in a document.
+
+- The block now states each limit as open, without naming any release, and
+  points at `ROADMAP.md` for where each one stands.
+- `tests/test_report_claims_guard.py` fails if any release reference appears
+  in the NON-CLAIMS section of either report. The drift was structural: docs
+  are rewritten every release, this constant was not. Keeping the version
+  numbers accurate is not a rule that holds; naming no version is.
+
+No change to records, signing, chaining, or verification logic. Records
+written by 0.2.0 verify unchanged, and the report's byte-determinism is
+unaffected.
+
 ## 0.2.0 — 2026-07-16
 
 ### Renamed to chiplog
