@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from chiplog.journal import JournalCorruptError, append_entry, replay
-from chiplog.manifest import JournalEntry, Manifest, RedactionState
+from chiplog.manifest import MANIFEST_SCHEMA_VERSION, JournalEntry, Manifest, RedactionState
 
 
 def _entry(**over: object) -> JournalEntry:
@@ -100,3 +100,63 @@ def test_corrupt_line_in_the_middle_raises(tmp_path: Path) -> None:
     append_entry(p, _entry(head_hash="h3"))
     with pytest.raises(JournalCorruptError):
         replay(p)
+
+
+def test_writes_v2(tmp_path: Path) -> None:
+    assert MANIFEST_SCHEMA_VERSION == "manifest.v2.0"
+    p = tmp_path / "manifest.json"
+    Manifest().save_atomic(p)
+    import json as _json
+
+    assert _json.loads(p.read_text())["schema_version"] == "manifest.v2.0"
+
+
+def test_a_v1_manifest_still_loads_and_its_heads_are_authoritative(tmp_path: Path) -> None:
+    # #14's lesson: a bump that orphans existing manifests is not acceptable.
+    # v1 predates the journal, so what it says IS the state.
+    import json as _json
+
+    p = tmp_path / "manifest.json"
+    p.write_text(
+        _json.dumps(
+            {
+                "schema_version": "manifest.v1.0",
+                "pubkey_id": None,
+                "pubkey_pem": None,
+                "pubkeys": {},
+                "chains": {
+                    "c1": {
+                        "chain_id": "c1",
+                        "head_hash": "old",
+                        "genesis_hash": "g",
+                        "record_count": 5,
+                        "first_record_id": "r1",
+                        "last_record_id": "r5",
+                    }
+                },
+                "files": {},
+                "redaction_state": "enabled",
+            }
+        )
+    )
+    m = Manifest.load_or_create(p)
+    assert m.chains["c1"].head_hash == "old"
+    assert m.chains["c1"].record_count == 5
+
+
+def test_load_replays_the_journal_over_the_checkpoint(tmp_path: Path) -> None:
+    p = tmp_path / "manifest.json"
+    Manifest().save_atomic(p)
+    append_entry(p.parent / "manifest.journal", _entry(head_hash="h9", record_count=9))
+    m = Manifest.load_or_create(p)
+    assert m.chains["c1"].head_hash == "h9"
+    assert m.chains["c1"].record_count == 9
+
+
+def test_an_unknown_schema_version_still_raises(tmp_path: Path) -> None:
+    import json as _json
+
+    p = tmp_path / "manifest.json"
+    p.write_text(_json.dumps({"schema_version": "manifest.v9.9", "chains": {}, "files": {}}))
+    with pytest.raises(ValueError, match="unsupported manifest schema_version"):
+        Manifest.load_or_create(p)

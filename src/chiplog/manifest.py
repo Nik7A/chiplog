@@ -22,7 +22,14 @@ from typing import Any
 
 from chiplog.keys import load_public_key_from_pem
 
-MANIFEST_SCHEMA_VERSION = "manifest.v1.0"
+MANIFEST_SCHEMA_VERSION = "manifest.v2.0"
+
+# v1.0 predates the journal: its checkpoint IS the state, so it is read as
+# written. v2.0 is checkpoint + journal. Reading both is required — a bump that
+# orphans manifests in the field is not acceptable (see the pubkeys change).
+SUPPORTED_MANIFEST_SCHEMA_VERSIONS = frozenset({"manifest.v1.0", MANIFEST_SCHEMA_VERSION})
+
+JOURNAL_FILENAME = "manifest.journal"
 
 
 class RedactionState(str, Enum):
@@ -211,10 +218,10 @@ class Manifest:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Manifest:
         schema_version = data.get("schema_version", MANIFEST_SCHEMA_VERSION)
-        if schema_version != MANIFEST_SCHEMA_VERSION:
+        if schema_version not in SUPPORTED_MANIFEST_SCHEMA_VERSIONS:
             raise ValueError(
                 f"unsupported manifest schema_version {schema_version!r}; "
-                f"this build supports {MANIFEST_SCHEMA_VERSION!r}"
+                f"this build supports {sorted(SUPPORTED_MANIFEST_SCHEMA_VERSIONS)}"
             )
         # Migrate a manifest written before `pubkeys` existed: its single
         # `pubkey_pem` is a key that really did sign here, so it belongs in the
@@ -270,7 +277,16 @@ class Manifest:
 
     @classmethod
     def load_or_create(cls, path: Path) -> Manifest:
-        """Load from disk if it exists; otherwise return a fresh instance."""
+        """Load from disk if it exists; otherwise return a fresh instance.
+
+        Whatever the checkpoint's version, the sibling `manifest.journal` is
+        replayed on top: a v2.0 checkpoint's heads lag by up to a compaction
+        interval, so replay brings it current. A v1.0 checkpoint predates the
+        journal, so in practice no journal file exists next to it and replay
+        is a no-op — its heads are the state, exactly as written.
+        """
+        from chiplog.journal import replay  # local import: journal imports manifest
+
         if path.exists():
             try:
                 data = json.loads(path.read_text(encoding="utf-8"))
@@ -280,8 +296,13 @@ class Manifest:
                     "Delete the manifest and re-run if you intentionally want "
                     "a fresh chain — but be aware this loses chain continuity."
                 ) from e
-            return cls.from_dict(data)
-        return cls()
+            manifest = cls.from_dict(data)
+        else:
+            manifest = cls()
+
+        for entry in replay(path.parent / JOURNAL_FILENAME):
+            manifest.apply_journal_entry(entry)
+        return manifest
 
     def save_atomic(self, path: Path) -> None:
         """Write manifest atomically: write a private temp file, fsync, rename.
@@ -307,6 +328,10 @@ class Manifest:
         so the last one to land is the newest. What is no longer possible is a
         torn manifest or a spurious failure.
         """
+        # Writing a checkpoint is what upgrades a directory to v2: a manifest
+        # loaded as v1.0 (no journal, heads authoritative as written) becomes
+        # v2.0 the moment it is next persisted.
+        self.schema_version = MANIFEST_SCHEMA_VERSION
         text = json.dumps(self.to_dict(), indent=2, sort_keys=True)
 
         fd, tmp_name = tempfile.mkstemp(
@@ -339,7 +364,9 @@ class Manifest:
 
 
 __all__ = [
+    "JOURNAL_FILENAME",
     "MANIFEST_SCHEMA_VERSION",
+    "SUPPORTED_MANIFEST_SCHEMA_VERSIONS",
     "ChainState",
     "FileChecksum",
     "JournalEntry",
