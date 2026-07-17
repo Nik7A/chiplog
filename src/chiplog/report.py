@@ -5,9 +5,10 @@ numbers, no clock-derived timestamps. The same LogVerificationResult run
 twice produces identical bytes. Auditors can include the report verbatim
 in their PDF appendix and the hash will match across reviewers.
 
-Every report ends with the NON-CLAIMS block — what v0.1 does NOT prove.
-This is the same disclaimer the README and SCOPE_STATEMENT carry: removing
-it would create a misleading deliverable.
+Every report ends with the NON-CLAIMS block — what this report does NOT
+prove. This is the same disclaimer the README and SCOPE_STATEMENT carry:
+removing it would create a misleading deliverable, and so would naming a
+release in it. See tests/test_report_claims_guard.py.
 """
 
 from __future__ import annotations
@@ -23,19 +24,23 @@ from chiplog.verify import (
 _REPORT_WIDTH = 78
 
 _NON_CLAIMS = """\
-What this report does NOT prove (v0.1 limitations — fixed in v0.2):
+What this report does NOT prove. Every limit below is open in the release
+that produced this report; none of them is closed:
 
 - It does NOT prove that records were not deleted from the head or tail
   of the chain. A single forward-only hash chain detects in-the-middle
   removal; tail-truncation requires an external anchor.
 
 - It does NOT prove that the signing key was not compromised. A holder
-  of the private key can produce a valid alternative log. v0.2 closes
-  this with the sidecar signer (key out of the agent's trust boundary).
+  of the private key can produce a valid alternative log. Closing this
+  needs a signer outside the agent's trust boundary.
 
 - It does NOT prove that the wall clock (ts_utc) was correct. The
-  ts_source field declares trust level (system/ntp/tsa); v0.2 adds
-  RFC 3161 TSA timestamps for true time anchoring.
+  ts_source field declares trust level (system/ntp/tsa); true time
+  anchoring needs an RFC 3161 timestamp authority.
+
+Read SCOPE_STATEMENT.md before staking a compliance claim on this report,
+and ROADMAP.md for where each limit stands.
 """
 
 
