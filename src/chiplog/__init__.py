@@ -22,6 +22,9 @@ from chiplog.schema.v1 import (
     Output,
     PolicyUnobservedReason,
     RouteTransition,
+    LLMPromptTransition,
+    LLMToolUse,
+    LLMTurnTransition,
     ToolCall,
     Ungated,
     UnobservedPolicy,
@@ -29,6 +32,8 @@ from chiplog.schema.v1 import (
     node_transition,
     policy_unobserved,
     route_transition,
+    llm_prompt_transition,
+    llm_turn_transition,
     ungated,
 )
 from chiplog.sinks.base import (
@@ -69,6 +74,9 @@ __all__ = [
     "RedactionConfig",
     "RedactionRule",
     "RouteTransition",
+    "LLMPromptTransition",
+    "LLMToolUse",
+    "LLMTurnTransition",
     "Sink",
     "SinkError",
     "SigningKey",
@@ -83,5 +91,7 @@ __all__ = [
     "node_transition",
     "policy_unobserved",
     "route_transition",
+    "llm_prompt_transition",
+    "llm_turn_transition",
     "ungated",
 ]

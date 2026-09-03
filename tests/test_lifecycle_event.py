@@ -45,11 +45,12 @@ def _recorder(sink: InMemorySink) -> AuditRecorder:
     return AuditRecorder(sink=sink, signing_key=_signing_key())
 
 
-# --- phase set is exactly the three real bosun events ------------------------
+# --- the graph phases are exactly the three real bosun events ----------------
 
 
-def test_phase_set_matches_real_bosun_events() -> None:
-    assert {p.value for p in LifecyclePhase} == {"node_enter", "node_exit", "route"}
+def test_graph_phase_set_matches_real_bosun_events() -> None:
+    graph = {p.value for p in LifecyclePhase if not p.value.startswith("llm_")}
+    assert graph == {"node_enter", "node_exit", "route"}
 
 
 # --- a lifecycle record carries NO tool / policy / outcome -------------------

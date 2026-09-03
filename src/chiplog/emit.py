@@ -98,6 +98,7 @@ from chiplog.keys import SigningKey
 from chiplog.normalize import normalize_for_canonical
 from chiplog.redact import RedactionConfig, redact_tool, redact_value
 from chiplog.schema.v1 import (
+    CONTENT_TRANSITIONS,
     Envelope,
     Error,
     Header,
@@ -505,10 +506,37 @@ class AuditRecorder:
             norm_attrs, unrep = normalize_for_canonical(
                 redacted_attrs, "$.attributes"
             )
+            # A content-bearing transition (llm_prompt / llm_turn) is host text,
+            # not an identity the instrumentation observed, so it gets the same
+            # pass. Node and route transitions carry only ids and are left as
+            # the caller typed them.
+            signed_transition = transition
+            if isinstance(transition, CONTENT_TRANSITIONS):
+                # Python mode, not JSON mode: pydantic's JSON mode would turn a
+                # nan into null on the way out, and the normalizer would then
+                # see nothing to announce — the exact laundering the marker
+                # exists to prevent.
+                redacted_tr, tr_entries = redact_value(
+                    transition.model_dump(),
+                    self._redaction,
+                    path="$.transition",
+                    token=token,
+                )
+                norm_tr, tr_unrep = normalize_for_canonical(
+                    redacted_tr, "$.transition"
+                )
+                # Re-validation can only fail if a marker landed on a typed
+                # field (`kind`, `turn`, a tool-use id); that is a hostile
+                # value in a place the schema does not admit one, and the
+                # construction guard turns it into a poisoned head rather
+                # than a silently dropped record.
+                signed_transition = type(transition).model_validate(norm_tr)
+                redaction_entries = [*redaction_entries, *tr_entries]
+                unrep = [*unrep, *tr_unrep]
             payload = LifecycleEventPayload(
                 time=self._time_block(),
                 phase=phase,
-                transition=transition,
+                transition=signed_transition,
                 attributes=norm_attrs,
                 redaction=redaction_entries,
                 unrepresentable=unrep,

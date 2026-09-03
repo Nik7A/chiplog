@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.2.4 — 2026-09-03
+
+A chain recorded every tool call a model made and never a word the model
+said. A host that wanted its trail to hold what the model was told and what
+it answered had no record kind to write, and `LifecyclePhase` is a closed
+enum on purpose, so this is a release rather than a host-side workaround.
+
+### Added — two model-side lifecycle phases
+
+- `LifecyclePhase.LLM_PROMPT` with `LLMPromptTransition(instructions)`: the
+  assembled system/skill prompt the host sent, once per chain. The recorder
+  attests that the host sent it, not that the model followed it.
+- `LifecyclePhase.LLM_TURN` with `LLMTurnTransition(turn, text, tool_uses)`:
+  one assistant turn — its text blocks and the tool invocations it requested
+  as `LLMToolUse(id, name, input)`. `id` is the provider's tool-use id, the
+  same value the resulting tool-call record carries as `header.step_id`, so
+  a reader joins a turn to its calls without a time heuristic.
+- Both are content, so `record_event` now redacts and normalizes a
+  content-bearing transition exactly as it does tool input/output and
+  `attributes` (paths under `$.transition`). Node and route transitions
+  still carry only an identity and are left as typed.
+
+Additive: existing records are unchanged in shape, the schema version stays
+v1.2, and a 0.2.3 reader that meets an `llm_turn` record rejects it at
+payload validation the same way it would any unknown phase.
+
 ## 0.2.3 — 2026-07-17
 
 One change, from a host running the library at a load the design never
