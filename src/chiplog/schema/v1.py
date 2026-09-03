@@ -466,14 +466,18 @@ def unobserved(reason: UnobservedReason) -> Unobserved:
 class LifecyclePhase(str, Enum):
     """The kind of lifecycle boundary this record marks.
 
-    Exactly the three events bosun's live LangGraph run emits — derived from the
-    real trail, not invented. A closed set so the honest transition shape for
+    The three graph events bosun's live LangGraph run emits — derived from the
+    real trail, not invented — plus the two model-side events a host added once
+    it wanted the trail to hold what the model was told and what it said, not
+    only what it did (0.2.4). A closed set so the honest transition shape for
     each phase (see LifecycleTransition) stays enumerable and reviewable.
     """
 
     NODE_ENTER = "node_enter"
     NODE_EXIT = "node_exit"
     ROUTE = "route"
+    LLM_PROMPT = "llm_prompt"
+    LLM_TURN = "llm_turn"
 
 
 class NodeTransition(BaseModel):
@@ -511,9 +515,75 @@ class RouteTransition(BaseModel):
     )
 
 
+class LLMPromptTransition(BaseModel):
+    """What the model was told before its first turn in this chain.
+
+    `instructions` is the assembled system/skill prompt the host handed the
+    model, copied verbatim. The recorder attests that the host SENT this text,
+    not that the model read or obeyed it. Content, so it goes through the same
+    redaction and normalization as tool input/output: a secret in a prompt is
+    redacted, and the entry says so.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["llm_prompt"] = "llm_prompt"
+    # A string as the host sent it, or the marker dict redaction/normalization
+    # put in its place — the same two shapes `Output.body` can take.
+    instructions: str | dict[str, Any]
+
+
+class LLMToolUse(BaseModel):
+    """One tool invocation the model REQUESTED in a turn.
+
+    `id` is the provider's tool-use id (Anthropic's `toolu_…`), the same value
+    the resulting tool-call record carries as `header.step_id` — the join
+    between a turn and the calls it caused, so a reader never needs a time
+    heuristic. It is an identity, not content: a redaction rule that matched it
+    would replace a typed field with a marker, and the construction guard
+    turns that into a poisoned chain head rather than a record with a forged
+    join key. The request is what is recorded here; whether it ran, and what
+    happened, is the tool-call record's business.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    name: str | dict[str, Any]
+    input: dict[str, Any] = Field(default_factory=dict)
+
+
+class LLMTurnTransition(BaseModel):
+    """What the model said in one turn.
+
+    `turn` counts from 1 within the chain. `text` holds the turn's text blocks in
+    order; `tool_uses` the tool invocations it requested. The recorder copies
+    the model's output as the host observed it and claims nothing about its
+    truth or quality. Content, so redacted and normalized like tool output: a
+    text block that matched a rule is a marker dict in the signed record, not
+    an edited string.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["llm_turn"] = "llm_turn"
+    turn: int = Field(ge=1)
+    text: list[str | dict[str, Any]] = Field(default_factory=list)
+    tool_uses: list[LLMToolUse] = Field(default_factory=list)
+
+
 LifecycleTransition = Annotated[
-    Union[NodeTransition, RouteTransition], Field(discriminator="kind")
+    Union[NodeTransition, RouteTransition, LLMPromptTransition, LLMTurnTransition],
+    Field(discriminator="kind"),
 ]
+
+# The transition kinds that carry host-supplied CONTENT (as opposed to an
+# identity the instrumentation observed). The recorder redacts and normalizes
+# these before signing, exactly as it does tool input/output and `attributes`.
+CONTENT_TRANSITIONS: tuple[type[BaseModel], ...] = (
+    LLMPromptTransition,
+    LLMTurnTransition,
+)
 
 
 def node_transition(node: str) -> NodeTransition:
@@ -524,6 +594,20 @@ def node_transition(node: str) -> NodeTransition:
 def route_transition(chosen: str) -> RouteTransition:
     """Convenience builder for a route transition (router-claimed chosen edge)."""
     return RouteTransition(chosen=chosen)
+
+
+def llm_prompt_transition(instructions: str) -> LLMPromptTransition:
+    """Convenience builder for an llm_prompt transition."""
+    return LLMPromptTransition(instructions=instructions)
+
+
+def llm_turn_transition(
+    turn: int,
+    text: list[str | dict[str, Any]] | None = None,
+    tool_uses: list[LLMToolUse] | None = None,
+) -> LLMTurnTransition:
+    """Convenience builder for an llm_turn transition."""
+    return LLMTurnTransition(turn=turn, text=list(text or []), tool_uses=list(tool_uses or []))
 
 
 class LifecycleEventPayload(BaseModel):
@@ -588,6 +672,20 @@ class LifecycleEventPayload(BaseModel):
         ):
             raise ValueError(
                 "phase 'route' requires a route transition, "
+                f"got {type(self.transition).__name__}"
+            )
+        if self.phase == LifecyclePhase.LLM_PROMPT and not isinstance(
+            self.transition, LLMPromptTransition
+        ):
+            raise ValueError(
+                "phase 'llm_prompt' requires an llm_prompt transition, "
+                f"got {type(self.transition).__name__}"
+            )
+        if self.phase == LifecyclePhase.LLM_TURN and not isinstance(
+            self.transition, LLMTurnTransition
+        ):
+            raise ValueError(
+                "phase 'llm_turn' requires an llm_turn transition, "
                 f"got {type(self.transition).__name__}"
             )
         return self
@@ -742,11 +840,17 @@ __all__ = [
     "LifecyclePhase",
     "NodeTransition",
     "RouteTransition",
+    "LLMPromptTransition",
+    "LLMToolUse",
+    "LLMTurnTransition",
     "LifecycleTransition",
+    "CONTENT_TRANSITIONS",
     "LifecycleEventPayload",
     "LifecycleRecord",
     "node_transition",
     "route_transition",
+    "llm_prompt_transition",
+    "llm_turn_transition",
     "RedactionEntry",
     "UnrepresentableReason",
     "UnrepresentableEntry",
